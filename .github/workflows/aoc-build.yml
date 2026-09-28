@@ -33,7 +33,11 @@ jobs:
         run: |
           test -f build/libs/AndroidOptimizationCore-1.3.0.jar
           ls -lh build/libs/AndroidOptimizationCore-1.3.0.jar
-          jar tf build/libs/AndroidOptimizationCore-1.3.0.jar | grep -E 'AndroidOptimizationCore|AOCTransformer|RenderCullingEngine|mcmod.info'
+          test -s build/libs/AndroidOptimizationCore-1.3.0.jar
+          unzip -t build/libs/AndroidOptimizationCore-1.3.0.jar >/dev/null
+          jar tf build/libs/AndroidOptimizationCore-1.3.0.jar | grep -q 'mcmod.info'
+          jar tf build/libs/AndroidOptimizationCore-1.3.0.jar | grep -q 'androidoptimizationcore/AOCTransformer.class'
+          du -h build/libs/AndroidOptimizationCore-1.3.0.jar
 
       - name: Publish JAR to repository
         run: |
