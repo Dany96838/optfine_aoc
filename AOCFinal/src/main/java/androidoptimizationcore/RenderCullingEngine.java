@@ -15,8 +15,6 @@ import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Conservative renderer-side culling.
@@ -26,12 +24,6 @@ import java.util.concurrent.Executors;
  * touched from the worker thread.
  */
 public final class RenderCullingEngine {
-    private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "AOC-Culling-Cache");
-        t.setDaemon(true);
-        return t;
-    });
-
     private static final Map<Long, CacheEntry> OCCLUSION = new ConcurrentHashMap<Long, CacheEntry>();
     private static final Map<Long, Boolean> PENDING = new ConcurrentHashMap<Long, Boolean>();
     private static final Queue<OcclusionRequest> REQUESTS = new ArrayDeque<OcclusionRequest>();
@@ -155,8 +147,8 @@ public final class RenderCullingEngine {
                     result, r.tick, r.x, r.y, r.z, r.box
             );
 
+            OCCLUSION.put(key, value);
             PENDING.remove(key);
-            WORKER.submit(() -> OCCLUSION.put(key, value));
         }
 
         if (tick % 40L == 0L && OCCLUSION.size() > 8192) {
