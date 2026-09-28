@@ -37,36 +37,36 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
         final int y = 48;
         final int step = 24;
 
-        buttonList.add(new GuiButton(1, left,  y,          bw, bh,
+        buttonList.add(new GuiButton(1, left, y, bw, bh,
                 toggle("key.aoc.entity", AOCConfig.entityCulling)));
-        buttonList.add(new GuiButton(2, right, y,          bw, bh,
+        buttonList.add(new GuiButton(2, right, y, bw, bh,
                 toggle("key.aoc.tile", AOCConfig.tileEntityCulling)));
 
-        buttonList.add(new GuiButton(3, left,  y + step,   bw, bh,
+        buttonList.add(new GuiButton(3, left, y + step, bw, bh,
                 toggle("key.aoc.occlusion", AOCConfig.occlusionCulling)));
-        buttonList.add(new GuiButton(4, right, y + step,   bw, bh,
-                toggle("key.aoc.animations", AOCConfig.animatedTextures)));
 
-        // Real draggable OptiFine-style numeric controls.
-        buttonList.add(new GuiSlider(5, left, y + step * 2, bw, bh,
+        buttonList.add(new GuiSlider(4, right, y + step, bw, bh,
                 I18n.format("key.aoc.entity_distance") + ": ",
-                " " + I18n.format("key.aoc.unit.blocks"), 8.0D, 512.0D, AOCConfig.entityDistance,
+                " " + I18n.format("key.aoc.unit.blocks"),
+                8.0D, 512.0D, AOCConfig.entityDistance,
+                false, true, this));
+
+        buttonList.add(new GuiSlider(5, left, y + step * 2, bw, bh,
+                I18n.format("key.aoc.tile_distance") + ": ",
+                " " + I18n.format("key.aoc.unit.blocks"),
+                8.0D, 512.0D, AOCConfig.tileEntityDistance,
                 false, true, this));
 
         buttonList.add(new GuiSlider(6, right, y + step * 2, bw, bh,
-                I18n.format("key.aoc.tile_distance") + ": ",
-                " " + I18n.format("key.aoc.unit.blocks"), 8.0D, 512.0D, AOCConfig.tileEntityDistance,
-                false, true, this));
-
-        buttonList.add(new GuiSlider(7, left, y + step * 3, bw, bh,
                 I18n.format("key.aoc.occlusion_budget") + ": ",
-                " " + I18n.format("key.aoc.unit.checks"), 0.0D, 64.0D, AOCConfig.occlusionBudget,
+                " " + I18n.format("key.aoc.unit.checks"),
+                0.0D, 64.0D, AOCConfig.occlusionBudget,
                 false, true, this));
 
-        buttonList.add(new GuiButton(8, right, y + step * 3, bw, bh,
+        buttonList.add(new GuiButton(7, left, y + step * 3, bw, bh,
                 I18n.format("key.aoc.reset")));
 
-        buttonList.add(new GuiButton(9, width / 2 - bw / 2, y + step * 4 + 5, bw, bh,
+        buttonList.add(new GuiButton(8, right, y + step * 3, bw, bh,
                 I18n.format("key.aoc.done")));
     }
 
@@ -86,13 +86,10 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             case 3:
                 AOCConfig.occlusionCulling = !AOCConfig.occlusionCulling;
                 break;
-            case 4:
-                AOCConfig.animatedTextures = !AOCConfig.animatedTextures;
-                break;
-            case 8:
+            case 7:
                 AOCConfig.resetDefaults();
                 break;
-            case 9:
+            case 8:
                 AOCConfig.save();
                 mc.displayGuiScreen(parent);
                 return;
@@ -109,13 +106,13 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
     public void onChangeSliderValue(GuiSlider slider) {
         try {
             switch (slider.id) {
-                case 5:
+                case 4:
                     AOCConfig.entityDistance = clampInt(slider.getValueInt(), 8, 512);
                     break;
-                case 6:
+                case 5:
                     AOCConfig.tileEntityDistance = clampInt(slider.getValueInt(), 8, 512);
                     break;
-                case 7:
+                case 6:
                     AOCConfig.occlusionBudget = clampInt(slider.getValueInt(), 0, 64);
                     break;
                 default:
@@ -157,12 +154,11 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             case 1: key = "key.aoc.tooltip.entity"; break;
             case 2: key = "key.aoc.tooltip.tile"; break;
             case 3: key = "key.aoc.tooltip.occlusion"; break;
-            case 4: key = "key.aoc.tooltip.animations"; break;
-            case 5:
-            case 6: key = "key.aoc.tooltip.distance"; break;
-            case 7: key = "key.aoc.tooltip.budget"; break;
-            case 8: key = "key.aoc.tooltip.reset"; break;
-            case 9: return;
+            case 4:
+            case 5: key = "key.aoc.tooltip.distance"; break;
+            case 6: key = "key.aoc.tooltip.budget"; break;
+            case 7: key = "key.aoc.tooltip.reset"; break;
+            case 8: return;
             default: return;
         }
 
