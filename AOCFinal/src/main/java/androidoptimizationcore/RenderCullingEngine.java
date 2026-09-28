@@ -55,13 +55,15 @@ public final class RenderCullingEngine {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.world == null || e == mc.getRenderViewEntity()) return false;
 
-        double r = AOCConfig.entityDistance;
-        if (e.getDistanceSq(camX, camY, camZ) > r * r) return true;
-
         AxisAlignedBB box = e.getEntityBoundingBox();
         if (box == null || !frustum.isBoundingBoxInFrustum(box.grow(0.05D))) return true;
 
-        return AOCConfig.occlusionCulling && requestOrUseOcclusion(mc.world, entityKey(e), box, null);
+        double r = AOCConfig.entityDistance;
+        if (!AOCConfig.occlusionCulling
+                || e.getDistanceSq(camX, camY, camZ) > r * r) {
+            return false;
+        }
+        return requestOrUseOcclusion(mc.world, entityKey(e), box, null);
     }
 
     public static boolean shouldCullTileEntity(TileEntity te) {
@@ -78,10 +80,11 @@ public final class RenderCullingEngine {
         double dz = pos.getZ() + .5D - camZ;
         double r = AOCConfig.tileEntityDistance;
 
-        if (dx * dx + dy * dy + dz * dz > r * r) return true;
         if (!frustum.isBoundingBoxInFrustum(box)) return true;
-
-        return AOCConfig.occlusionCulling && requestOrUseOcclusion(mc.world, tileKey(te), box, pos);
+        if (!AOCConfig.occlusionCulling || dx * dx + dy * dy + dz * dz > r * r) {
+            return false;
+        }
+        return requestOrUseOcclusion(mc.world, tileKey(te), box, pos);
     }
 
     private static long entityKey(Entity e) {
