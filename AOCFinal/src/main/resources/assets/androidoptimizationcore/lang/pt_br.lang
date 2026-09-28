@@ -1,5 +1,5 @@
 key.aoc.title=Android Optimization Core
-key.aoc.open=Abrir Android Optimization Core
+key.aoc.open=AOC
 key.aoc.done=Concluído
 key.aoc.reset=Restaurar Padrões
 key.aoc.entity=Culling de Entidades
@@ -11,12 +11,13 @@ key.aoc.off=Desligado
 key.aoc.entity_distance=Alcance de Visibilidade de Entidades
 key.aoc.tile_distance=Alcance de Visibilidade de TileEntities
 key.aoc.occlusion_budget=Verificações de Oclusão/Tick
+key.aoc.unit.blocks=blocos
+key.aoc.unit.checks=verificações
 key.aoc.tooltip.entity=Aplica frustum culling nas entidades; elas continuam vivas e ativas.
 key.aoc.tooltip.tile=Aplica frustum culling nos TileEntities; eles continuam carregados.
 key.aoc.tooltip.occlusion=Testa blocos sólidos e oculta somente objetos comprovadamente bloqueados.
-key.aoc.tooltip.animations=Mantém o tratamento de animações compatível com o Smart Animations do OptiFine.
+key.aoc.tooltip.animations=Otimiza texturas animadas fora da tela sem alterar as animações visíveis do OptiFine.
 key.aoc.tooltip.distance=Define até onde o AOC faz verificações extras de visibilidade; não limita a distância de renderização.
 key.aoc.tooltip.budget=Limita os ray traces síncronos de oclusão por tick.
-key.aoc.tooltip.reset=Restaura os padrões: culling e oclusão ligados, alcances 32 e orçamento 16.
-
+key.aoc.tooltip.reset=Restaura as configurações padrão do AOC.
 key.aoc.subtitle=Otimizações de renderização para Forge 1.12.2 + OptiFine G5
