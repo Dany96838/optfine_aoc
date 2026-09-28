@@ -52,3 +52,12 @@ Status:
 - Forge client startup test after corrections: NOT YET VERIFIED
 - OptiFine G5 runtime test: NOT YET VERIFIED
 - F4 Monitor integration test: NOT YET VERIFIED
+
+### 6. Camera update cost — fixed
+Problem:
+- Camera/frustum data was being rebuilt from every entity/TileEntity render hook.
+Fix:
+- Entity/TileEntity hooks now reuse the frame camera.
+- Camera is refreshed from the client RenderTick START event.
+- The occlusion budget of 0 now clears pending work instead of leaving a request queued.
+
