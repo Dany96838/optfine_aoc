@@ -3,6 +3,7 @@ package androidoptimizationcore;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.resources.I18n;
+import net.minecraftforge.fml.client.config.GuiSlider;
 import net.minecraftforge.fml.client.config.GuiUtils;
 
 import java.io.IOException;
@@ -10,13 +11,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AOC settings screen using the same compact two-column interaction pattern
- * familiar from the vanilla/OptiFine Video Settings screen.
+ * AOC settings screen using the same compact two-column layout as the
+ * vanilla/OptiFine video settings screen.
  *
- * Every option uses an identical 200x20 button. Value options cycle through
- * predefined choices on click, just like the video-settings selectors.
+ * Numeric options use Forge's 1.12.2 GuiSlider, so they are real draggable
+ * selectors rather than click-to-cycle buttons.
  */
-public final class AOCGui extends GuiScreen {
+public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
     private final GuiScreen parent;
     private final List<String> tooltip = new ArrayList<String>();
 
@@ -36,36 +37,41 @@ public final class AOCGui extends GuiScreen {
         final int y = 48;
         final int step = 24;
 
-        // Same width/height for every setting button.
-        buttonList.add(new GuiButton(1, left,  y,          bw, bh, toggle("key.aoc.entity", AOCConfig.entityCulling)));
-        buttonList.add(new GuiButton(2, right, y,          bw, bh, toggle("key.aoc.tile", AOCConfig.tileEntityCulling)));
+        buttonList.add(new GuiButton(1, left,  y,          bw, bh,
+                toggle("key.aoc.entity", AOCConfig.entityCulling)));
+        buttonList.add(new GuiButton(2, right, y,          bw, bh,
+                toggle("key.aoc.tile", AOCConfig.tileEntityCulling)));
 
-        buttonList.add(new GuiButton(3, left,  y + step,    bw, bh, toggle("key.aoc.occlusion", AOCConfig.occlusionCulling)));
-        buttonList.add(new GuiButton(4, right, y + step,    bw, bh, toggle("key.aoc.animations", AOCConfig.animatedTextures)));
+        buttonList.add(new GuiButton(3, left,  y + step,   bw, bh,
+                toggle("key.aoc.occlusion", AOCConfig.occlusionCulling)));
+        buttonList.add(new GuiButton(4, right, y + step,   bw, bh,
+                toggle("key.aoc.animations", AOCConfig.animatedTextures)));
 
-        buttonList.add(new GuiButton(5, left,  y + step*2,  bw, bh,
-                value("key.aoc.entity_distance", AOCConfig.entityDistance, "blocks")));
-        buttonList.add(new GuiButton(6, right, y + step*2,  bw, bh,
-                value("key.aoc.tile_distance", AOCConfig.tileEntityDistance, "blocks")));
+        // Real draggable OptiFine-style numeric controls.
+        buttonList.add(new GuiSlider(5, left, y + step * 2, bw, bh,
+                I18n.format("key.aoc.entity_distance") + ": ",
+                " blocks", 8.0D, 512.0D, AOCConfig.entityDistance,
+                false, true, this));
 
-        buttonList.add(new GuiButton(7, left,  y + step*3,  bw, bh,
-                value("key.aoc.occlusion_budget", AOCConfig.occlusionBudget, "checks")));
+        buttonList.add(new GuiSlider(6, right, y + step * 2, bw, bh,
+                I18n.format("key.aoc.tile_distance") + ": ",
+                " blocks", 8.0D, 512.0D, AOCConfig.tileEntityDistance,
+                false, true, this));
 
-        // Reset is a real setting action, kept in the same grid and same size.
-        buttonList.add(new GuiButton(8, right, y + step*3, bw, bh,
+        buttonList.add(new GuiSlider(7, left, y + step * 3, bw, bh,
+                I18n.format("key.aoc.occlusion_budget") + ": ",
+                " checks", 0.0D, 64.0D, AOCConfig.occlusionBudget,
+                false, true, this));
+
+        buttonList.add(new GuiButton(8, right, y + step * 3, bw, bh,
                 I18n.format("key.aoc.reset")));
 
-        // Centered Done button, also exactly 200x20.
-        buttonList.add(new GuiButton(9, width / 2 - bw / 2, y + step*4 + 5, bw, bh,
+        buttonList.add(new GuiButton(9, width / 2 - bw / 2, y + step * 4 + 5, bw, bh,
                 I18n.format("key.aoc.done")));
     }
 
     private String toggle(String key, boolean value) {
         return I18n.format(key) + ": " + I18n.format(value ? "key.aoc.on" : "key.aoc.off");
-    }
-
-    private String value(String key, int value, String unit) {
-        return I18n.format(key) + ": " + value + " " + unit;
     }
 
     @Override
@@ -83,15 +89,6 @@ public final class AOCGui extends GuiScreen {
             case 4:
                 AOCConfig.animatedTextures = !AOCConfig.animatedTextures;
                 break;
-            case 5:
-                AOCConfig.entityDistance = nextDistance(AOCConfig.entityDistance);
-                break;
-            case 6:
-                AOCConfig.tileEntityDistance = nextDistance(AOCConfig.tileEntityDistance);
-                break;
-            case 7:
-                AOCConfig.occlusionBudget = nextBudget(AOCConfig.occlusionBudget);
-                break;
             case 8:
                 AOCConfig.resetDefaults();
                 break;
@@ -99,33 +96,39 @@ public final class AOCGui extends GuiScreen {
                 AOCConfig.save();
                 mc.displayGuiScreen(parent);
                 return;
+            default:
+                // GuiSlider changes are delivered through onChangeSliderValue().
+                return;
         }
 
         AOCConfig.save();
         initGui();
     }
 
-    /**
-     * Visibility ranges are verification radii, not render-distance limits.
-     * Outside the selected range AOC simply stops doing its extra occlusion
-     * work and lets normal Minecraft/OptiFine rendering continue.
-     */
-    private int nextDistance(int v) {
-        final int[] values = {
-                8, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512
-        };
-        for (int i = 0; i < values.length; i++) {
-            if (values[i] == v) return values[(i + 1) % values.length];
+    @Override
+    public void onChangeSliderValue(GuiSlider slider) {
+        try {
+            switch (slider.id) {
+                case 5:
+                    AOCConfig.entityDistance = clampInt(slider.getValueInt(), 8, 512);
+                    break;
+                case 6:
+                    AOCConfig.tileEntityDistance = clampInt(slider.getValueInt(), 8, 512);
+                    break;
+                case 7:
+                    AOCConfig.occlusionBudget = clampInt(slider.getValueInt(), 0, 64);
+                    break;
+                default:
+                    return;
+            }
+            AOCConfig.save();
+        } catch (Throwable ignored) {
+            // GUI interaction must never crash the client.
         }
-        return 32;
     }
 
-    private int nextBudget(int v) {
-        final int[] values = {0, 4, 8, 12, 16, 24, 32, 48, 64};
-        for (int i = 0; i < values.length; i++) {
-            if (values[i] == v) return values[(i + 1) % values.length];
-        }
-        return 16;
+    private int clampInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     @Override
@@ -160,6 +163,7 @@ public final class AOCGui extends GuiScreen {
             case 6: key = "key.aoc.tooltip.distance"; break;
             case 7: key = "key.aoc.tooltip.budget"; break;
             case 8: key = "key.aoc.tooltip.reset"; break;
+            case 9: return;
             default: return;
         }
 
