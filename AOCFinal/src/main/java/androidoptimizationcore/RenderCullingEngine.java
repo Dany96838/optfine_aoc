@@ -148,7 +148,10 @@ public final class RenderCullingEngine {
 
             AxisAlignedBB box = tileEntity.getRenderBoundingBox();
             if (box == null) box = new AxisAlignedBB(pos);
-            if (box.hasNaN()) return false;
+            if (box.hasNaN() || box == TileEntity.INFINITE_EXTENT_AABB) return false;
+            if (box.maxX - box.minX > 64.0D
+                    || box.maxY - box.minY > 64.0D
+                    || box.maxZ - box.minZ > 64.0D) return false;
 
             if (!tileFrustum.isBoundingBoxInFrustum(box)) {
                 if (!loggedTileCull) {
@@ -158,11 +161,7 @@ public final class RenderCullingEngine {
                 return true;
             }
 
-            if (!AOCConfig.occlusionCulling
-                    || box == TileEntity.INFINITE_EXTENT_AABB
-                    || box.maxX - box.minX > 64.0D
-                    || box.maxY - box.minY > 64.0D
-                    || box.maxZ - box.minZ > 64.0D) {
+            if (!AOCConfig.occlusionCulling) {
                 return false;
             }
 
