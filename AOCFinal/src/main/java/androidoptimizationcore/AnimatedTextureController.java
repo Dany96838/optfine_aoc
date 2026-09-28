@@ -1,15 +1,15 @@
 package androidoptimizationcore;
 
+/**
+ * Animation compatibility marker.
+ *
+ * AOC intentionally does not globally skip TextureMap ticks. OptiFine G5's
+ * Smart Animations can decide which animated sprites are currently visible.
+ * Globally returning early from TextureMap.tick() freezes visible animations
+ * and also interferes with OptiFine's sprite bookkeeping.
+ */
 public final class AnimatedTextureController {
-    private static int tick;
-    private static boolean skip;
     private AnimatedTextureController() {}
-
-    public static void tick() {
-        if (!AOCConfig.animatedTextures) { skip = false; return; }
-        tick++;
-        skip = (tick % Math.max(1, AOCConfig.animationInterval)) != 0;
-    }
-
-    public static boolean shouldSkipAtlasUpdate() { return skip; }
+    public static void tick() {}
+    public static boolean shouldSkipAtlasUpdate() { return false; }
 }
