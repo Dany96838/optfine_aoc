@@ -3,37 +3,40 @@ package androidoptimizationcore;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.ClippingHelperImpl;
 import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.entity.Entity;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.world.World;
 
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Client-side renderer culling for Minecraft 1.12.2.
+ * Client-side rendering culling for Minecraft 1.12.2.
  *
- * Important: this class uses the 1.12.2 World#rayTraceBlocks API.
- * ClipContext does not exist in Minecraft 1.12.2.
+ * Design rules:
+ * - never removes, unloads, freezes or modifies an entity/TileEntity;
+ * - fail-open whenever AOC cannot prove that an object is invisible;
+ * - all Minecraft World access stays on the client thread;
+ * - occlusion work is bounded by the configured per-tick budget.
  *
- * Culling is fail-open:
- * - entities/TileEntities are never removed or unloaded;
- * - a failed or budget-exhausted visibility check renders normally;
- * - only a fresh result proving that every visibility sample is blocked
- *   can suppress rendering.
- *
- * World access remains on the Minecraft client thread. No worker thread
- * touches Minecraft world state.
+ * Entity culling is integrated at RenderManager.shouldRender(), where the
+ * vanilla render decision is already made with the current ICamera and
+ * camera coordinates. This avoids relying on a stale custom frustum for the
+ * entity path.
  */
 public final class RenderCullingEngine {
-    private static final Map<Long, CacheEntry> OCCLUSION =
-            new ConcurrentHashMap<Long, CacheEntry>();
+    private static final Map<Entity, CacheEntry> ENTITY_OCCLUSION =
+            new HashMap<Entity, CacheEntry>();
+    private static final Map<BlockPos, CacheEntry> TILE_OCCLUSION =
+            new HashMap<BlockPos, CacheEntry>();
 
-    private static Frustum frustum =
+    private static Frustum tileFrustum =
             new Frustum(ClippingHelperImpl.getInstance());
 
     private static double camX;
@@ -41,15 +44,18 @@ public final class RenderCullingEngine {
     private static double camZ;
     private static World currentWorld;
     private static long tick;
-
-    /**
-     * Remaining synchronous occlusion checks for the current client tick.
-     * A check is one complete 9-sample visibility test.
-     */
     private static int remainingChecks;
+
+    private static boolean loggedEntityCull;
+    private static boolean loggedTileCull;
 
     private RenderCullingEngine() {}
 
+    /**
+     * Updates the custom camera/frustum used only by the TileEntity path.
+     * Entity frustum culling is delegated to vanilla's ICamera in
+     * RenderManager.shouldRender().
+     */
     public static void updateCamera() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null) return;
@@ -59,50 +65,77 @@ public final class RenderCullingEngine {
 
         float pt = mc.getRenderPartialTicks();
 
-        camX = camera.prevPosX
-                + (camera.posX - camera.prevPosX) * pt;
-        camY = camera.prevPosY
-                + (camera.posY - camera.prevPosY) * pt
+        camX = camera.prevPosX + (camera.posX - camera.prevPosX) * pt;
+        camY = camera.prevPosY + (camera.posY - camera.prevPosY) * pt
                 + camera.getEyeHeight();
-        camZ = camera.prevPosZ
-                + (camera.posZ - camera.prevPosZ) * pt;
+        camZ = camera.prevPosZ + (camera.posZ - camera.prevPosZ) * pt;
 
         Frustum f = new Frustum(ClippingHelperImpl.getInstance());
         f.setPosition(camX, camY, camZ);
-        frustum = f;
+        tileFrustum = f;
     }
 
-    public static boolean shouldCullEntity(Entity entity) {
+    /**
+     * Called from RenderManager.shouldRender().
+     *
+     * Vanilla remains responsible for its normal distance/frustum rules.
+     * AOC adds only block-occlusion culling here.
+     */
+    public static boolean shouldCullEntity(
+            Entity entity,
+            ICamera camera,
+            double renderCamX,
+            double renderCamY,
+            double renderCamZ) {
+
         try {
-            if (!AOCConfig.entityCulling || entity == null) return false;
-
-            Minecraft mc = Minecraft.getMinecraft();
-            if (mc == null || mc.world == null) return false;
-
-            if (entity == mc.getRenderViewEntity()) return false;
-
-            AxisAlignedBB box = entity.getEntityBoundingBox();
-            if (box == null) return false;
-
-            // Frustum culling is independent of block occlusion.
-            if (!frustum.isBoundingBoxInFrustum(box.grow(0.05D))) {
-                return true;
-            }
-
-            if (!AOCConfig.occlusionCulling) return false;
-
-            double distance = AOCConfig.entityDistance;
-            if (entity.getDistanceSq(camX, camY, camZ) > distance * distance) {
+            if (!AOCConfig.entityCulling
+                    || !AOCConfig.occlusionCulling
+                    || entity == null) {
                 return false;
             }
 
-            return isOccluded(mc.world, entityKey(entity), box, null);
+            Minecraft mc = Minecraft.getMinecraft();
+            if (mc == null || mc.world == null) return false;
+            if (entity == mc.getRenderViewEntity()) return false;
+
+            AxisAlignedBB box = entity.getEntityBoundingBox();
+            if (box == null || box.hasNaN()) return false;
+
+            // If vanilla already knows that the entity is outside its current
+            // camera frustum, AOC does not need to do any additional work.
+            if (camera != null && !entity.ignoreFrustumCheck
+                    && !camera.isBoundingBoxInFrustum(box.grow(0.05D))) {
+                return false;
+            }
+
+            double distance = AOCConfig.entityDistance;
+            double dx = entity.posX - renderCamX;
+            double dy = entity.posY - renderCamY;
+            double dz = entity.posZ - renderCamZ;
+
+            if (dx * dx + dy * dy + dz * dz > distance * distance) {
+                return false;
+            }
+
+            return isOccluded(
+                    mc.world,
+                    ENTITY_OCCLUSION,
+                    entity,
+                    box,
+                    null,
+                    renderCamX,
+                    renderCamY,
+                    renderCamZ);
         } catch (Throwable ignored) {
-            // A renderer optimization must never break another mod's entity.
             return false;
         }
     }
 
+    /**
+     * TileEntities have no ICamera parameter in their dispatcher API, so
+     * AOC keeps a conservative custom frustum plus block-occlusion check.
+     */
     public static boolean shouldCullTileEntity(TileEntity tileEntity) {
         try {
             if (!AOCConfig.tileEntityCulling || tileEntity == null) return false;
@@ -114,19 +147,22 @@ public final class RenderCullingEngine {
             if (pos == null) return false;
 
             AxisAlignedBB box = tileEntity.getRenderBoundingBox();
-            if (box == null) {
-                box = new AxisAlignedBB(pos);
-            }
+            if (box == null) box = new AxisAlignedBB(pos);
+            if (box.hasNaN()) return false;
 
-            if (!frustum.isBoundingBoxInFrustum(box)) {
+            if (!tileFrustum.isBoundingBoxInFrustum(box)) {
+                if (!loggedTileCull) {
+                    loggedTileCull = true;
+                    System.out.println("[AOC] TileEntity frustum culling is active.");
+                }
                 return true;
             }
 
             if (!AOCConfig.occlusionCulling
                     || box == TileEntity.INFINITE_EXTENT_AABB
-                    || Math.abs(box.maxX - box.minX) > 64.0D
-                    || Math.abs(box.maxY - box.minY) > 64.0D
-                    || Math.abs(box.maxZ - box.minZ) > 64.0D) {
+                    || box.maxX - box.minX > 64.0D
+                    || box.maxY - box.minY > 64.0D
+                    || box.maxZ - box.minZ > 64.0D) {
                 return false;
             }
 
@@ -139,101 +175,100 @@ public final class RenderCullingEngine {
                 return false;
             }
 
-            return isOccluded(mc.world, tileKey(tileEntity), box, pos);
+            boolean result = isOccluded(
+                    mc.world,
+                    TILE_OCCLUSION,
+                    pos,
+                    box,
+                    pos,
+                    camX,
+                    camY,
+                    camZ);
+
+            if (result && !loggedTileCull) {
+                loggedTileCull = true;
+                System.out.println("[AOC] TileEntity block-occlusion culling is active.");
+            }
+
+            return result;
         } catch (Throwable ignored) {
             return false;
         }
     }
 
-    private static long entityKey(Entity entity) {
-        return 0x4000000000000000L
-                | (entity.getEntityId() & 0x3FFFFFFFL);
-    }
-
-    private static long tileKey(TileEntity tileEntity) {
-        BlockPos pos = tileEntity.getPos();
-        return ((long) pos.getX() * 341873128712L)
-                ^ ((long) pos.getY() * 132897987541L)
-                ^ ((long) pos.getZ() * 42317861L);
-    }
-
-    /**
-     * Returns true only when a fresh cache entry proves complete occlusion.
-     * If there is no cache entry and budget remains, the test is performed
-     * synchronously during rendering. This removes the old one-tick blind
-     * window where every new object necessarily rendered once before being
-     * tested.
-     */
-    private static boolean isOccluded(
+    private static <K> boolean isOccluded(
             World world,
-            long key,
+            Map<K, CacheEntry> cache,
+            K key,
             AxisAlignedBB box,
-            BlockPos targetBlock) {
+            BlockPos targetBlock,
+            double startX,
+            double startY,
+            double startZ) {
 
         if (currentWorld != world) {
             currentWorld = world;
-            OCCLUSION.clear();
+            ENTITY_OCCLUSION.clear();
+            TILE_OCCLUSION.clear();
             remainingChecks = Math.max(0, AOCConfig.occlusionBudget);
         }
 
-        CacheEntry cached = OCCLUSION.get(key);
+        CacheEntry cached = cache.get(key);
         if (cached != null
-                && cached.isUsable(tick, camX, camY, camZ, box)) {
+                && cached.isUsable(tick, startX, startY, startZ, box)) {
             return cached.occluded;
         }
 
         if (remainingChecks <= 0) {
-            // No proof means no culling.
             return false;
         }
 
         remainingChecks--;
 
         boolean result = computeOcclusion(
-                world, box, targetBlock, camX, camY, camZ);
+                world, box, targetBlock, startX, startY, startZ);
 
-        OCCLUSION.put(
+        cache.put(
                 key,
                 new CacheEntry(
                         result,
                         tick,
-                        camX,
-                        camY,
-                        camZ,
-                        box
-                )
-        );
+                        startX,
+                        startY,
+                        startZ,
+                        box));
+
+        if (result && key instanceof Entity && !loggedEntityCull) {
+            loggedEntityCull = true;
+            System.out.println("[AOC] Entity block-occlusion culling is active.");
+        }
 
         return result;
     }
 
     /**
-     * Called once at the end of every client tick.
-     *
-     * The budget is prepared for the following render period. There is no
-     * asynchronous world access and no queued world work.
+     * Prepares the next render period's occlusion budget.
      */
     public static void endClientTick() {
         tick++;
-
         updateCamera();
 
         remainingChecks = Math.max(0, AOCConfig.occlusionBudget);
 
-        if (tick % 40L == 0L && OCCLUSION.size() > 8192) {
-            OCCLUSION.clear();
+        // Keep memory bounded even when a world contains a very large number
+        // of entities/TESRs over a long session.
+        if (tick % 40L == 0L) {
+            if (ENTITY_OCCLUSION.size() > 8192) ENTITY_OCCLUSION.clear();
+            if (TILE_OCCLUSION.size() > 8192) TILE_OCCLUSION.clear();
         }
     }
 
     /**
-     * Minecraft 1.12.2 block line-of-sight test.
+     * 1.12.2 visibility test.
      *
-     * There is no ClipContext in 1.12.2. World#rayTraceBlocks is the correct
-     * API for this version.
-     *
-     * Nine samples are tested: center plus the eight near-corners of the
-     * bounding box. The object is considered occluded only if every sample
-     * hits a blocking block before reaching the object.
+     * Nine points are sampled. An object is culled only if every point is
+     * blocked by an opaque cube. Non-opaque blocks (including normal glass)
+     * are treated as transparent, so an entity behind glass remains visible.
      */
     private static boolean computeOcclusion(
             World world,
@@ -243,68 +278,131 @@ public final class RenderCullingEngine {
             double startY,
             double startZ) {
 
-        double ex = Math.min(
-                0.05D,
-                Math.max(0.001D, (box.maxX - box.minX) * 0.25D)
-        );
-        double ey = Math.min(
-                0.05D,
-                Math.max(0.001D, (box.maxY - box.minY) * 0.25D)
-        );
-        double ez = Math.min(
-                0.05D,
-                Math.max(0.001D, (box.maxZ - box.minZ) * 0.25D)
-        );
+        double ex = Math.min(0.05D,
+                Math.max(0.001D, (box.maxX - box.minX) * 0.25D));
+        double ey = Math.min(0.05D,
+                Math.max(0.001D, (box.maxY - box.minY) * 0.25D));
+        double ez = Math.min(0.05D,
+                Math.max(0.001D, (box.maxZ - box.minZ) * 0.25D));
 
-        double centerX = (box.minX + box.maxX) * 0.5D;
-        double centerY = (box.minY + box.maxY) * 0.5D;
-        double centerZ = (box.minZ + box.maxZ) * 0.5D;
+        double cx = (box.minX + box.maxX) * 0.5D;
+        double cy = (box.minY + box.maxY) * 0.5D;
+        double cz = (box.minZ + box.maxZ) * 0.5D;
 
         double[][] samples = new double[][] {
-                {centerX, centerY, centerZ},
-
+                {cx, cy, cz},
                 {box.minX + ex, box.minY + ey, box.minZ + ez},
                 {box.maxX - ex, box.minY + ey, box.minZ + ez},
                 {box.minX + ex, box.maxY - ey, box.minZ + ez},
                 {box.maxX - ex, box.maxY - ey, box.minZ + ez},
-
                 {box.minX + ex, box.minY + ey, box.maxZ - ez},
                 {box.maxX - ex, box.minY + ey, box.maxZ - ez},
                 {box.minX + ex, box.maxY - ey, box.maxZ - ez},
                 {box.maxX - ex, box.maxY - ey, box.maxZ - ez}
         };
 
-        BlockPos cameraBlock =
-                new BlockPos(startX, startY, startZ);
+        BlockPos cameraBlock = new BlockPos(startX, startY, startZ);
 
         for (double[] sample : samples) {
-            RayTraceResult hit = world.rayTraceBlocks(
-                    new Vec3d(startX, startY, startZ),
-                    new Vec3d(sample[0], sample[1], sample[2]),
-                    false,
-                    true,
-                    false
-            );
-
-            if (hit == null
-                    || hit.typeOfHit != RayTraceResult.Type.BLOCK) {
-                return false;
-            }
-
-            BlockPos hitPos = hit.getBlockPos();
-
-            // A TileEntity's own block is the target, not an occluder.
-            if (targetBlock != null && targetBlock.equals(hitPos)) {
-                return false;
-            }
-
-            // Never let the block containing the camera count as a wall.
-            if (cameraBlock.equals(hitPos)) {
+            if (!rayBlockedByOpaqueBlock(
+                    world,
+                    startX, startY, startZ,
+                    sample[0], sample[1], sample[2],
+                    cameraBlock,
+                    targetBlock)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /**
+     * Traces through transparent/non-opaque blocks until it finds either an
+     * opaque blocker or the target. This specifically prevents ordinary glass
+     * from being treated as a wall.
+     */
+    private static boolean rayBlockedByOpaqueBlock(
+            World world,
+            double startX,
+            double startY,
+            double startZ,
+            double endX,
+            double endY,
+            double endZ,
+            BlockPos cameraBlock,
+            BlockPos targetBlock) {
+
+        double sx = startX;
+        double sy = startY;
+        double sz = startZ;
+
+        double dx = endX - startX;
+        double dy = endY - startY;
+        double dz = endZ - startZ;
+        double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        if (length < 0.0001D) return false;
+
+        final int maxTransparentHits = 16;
+        final double advance = 0.002D;
+
+        for (int i = 0; i < maxTransparentHits; i++) {
+            RayTraceResult hit = world.rayTraceBlocks(
+                    new Vec3d(sx, sy, sz),
+                    new Vec3d(endX, endY, endZ),
+                    false,
+                    true,
+                    false);
+
+            if (hit == null || hit.typeOfHit != RayTraceResult.Type.BLOCK) {
+                return false;
+            }
+
+            BlockPos hitPos = hit.getBlockPos();
+            if (hitPos == null) return false;
+
+            if (targetBlock != null && targetBlock.equals(hitPos)) {
+                return false;
+            }
+
+            if (cameraBlock.equals(hitPos)) {
+                return false;
+            }
+
+            IBlockState state = world.getBlockState(hitPos);
+
+            if (state == null || !state.isOpaqueCube()) {
+                if (hit.hitVec == null) return false;
+
+                double px = hit.hitVec.x;
+                double py = hit.hitVec.y;
+                double pz = hit.hitVec.z;
+
+                double nx = dx / length;
+                double ny = dy / length;
+                double nz = dz / length;
+
+                sx = px + nx * advance;
+                sy = py + ny * advance;
+                sz = pz + nz * advance;
+
+                // If numerical error moved us past the sample, the ray is clear.
+                double remainingX = endX - sx;
+                double remainingY = endY - sy;
+                double remainingZ = endZ - sz;
+                if (remainingX * dx + remainingY * dy + remainingZ * dz <= 0.0D) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            return true;
+        }
+
+        // Too many transparent surfaces is not proof of occlusion.
+        return false;
     }
 
     private static final class CacheEntry {
