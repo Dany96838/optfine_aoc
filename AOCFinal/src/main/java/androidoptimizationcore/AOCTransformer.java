@@ -134,7 +134,7 @@ public final class AOCTransformer implements IClassTransformer {
         }
 
         if (Type.getReturnType(desc).getSort() != Type.VOID) return false;
-        if (args.length < 4 || args.length > 7) return false;
+        if (args.length < 3 || args.length > 7) return false;
         if (args[0].getSort() != Type.OBJECT) return false;
 
         // All parameters after TileEntity in the four render overloads are
