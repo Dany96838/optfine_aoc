@@ -12,7 +12,6 @@ public final class AOCConfig {
     public static int entityDistance = 32;
     public static int tileEntityDistance = 32;
     public static int occlusionBudget = 16;
-    public static int animationInterval = 1;
 
     private AOCConfig() {}
 
@@ -34,8 +33,6 @@ public final class AOCConfig {
                 "Maximum distance at which AOC performs TileEntity visibility checks.");
         occlusionBudget = cfg.getInt("occlusionBudget", "render", occlusionBudget, 0, 64,
                 "Maximum synchronous world ray checks per client tick.");
-        animationInterval = cfg.getInt("animationInterval", "render", animationInterval, 1, 4,
-                "Animated texture tick interval. 1 = normal, 4 = one update every four ticks.");
         if (cfg.hasChanged()) cfg.save();
     }
 
