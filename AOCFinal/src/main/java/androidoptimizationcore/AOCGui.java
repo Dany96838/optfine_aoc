@@ -121,7 +121,6 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
                 default:
                     return;
             }
-            AOCConfig.save();
         } catch (Throwable ignored) {
             // GUI interaction must never crash the client.
         }
