@@ -15,7 +15,7 @@ buildscript {
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'java'
 
-version = '1.2.0'
+version = '1.2.1'
 group = 'androidoptimizationcore'
 archivesBaseName = 'AndroidOptimizationCore'
 
