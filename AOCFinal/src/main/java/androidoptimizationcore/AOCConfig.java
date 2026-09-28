@@ -10,7 +10,6 @@ public final class AOCConfig {
     public static boolean entityCulling = true;
     public static boolean tileEntityCulling = true;
     public static boolean occlusionCulling = true;
-    public static boolean animatedTextures = true;
     public static int entityDistance = 32;
     public static int tileEntityDistance = 32;
     public static int occlusionBudget = 16;
@@ -25,21 +24,31 @@ public final class AOCConfig {
     public static void sync() {
         if (cfg == null) return;
 
-        entityCulling = cfg.getBoolean("entityCulling", "render", entityCulling,
-                "Cull entities outside the camera frustum. Entities remain alive and active.");
-        tileEntityCulling = cfg.getBoolean("tileEntityCulling", "render", tileEntityCulling,
-                "Cull TileEntities outside the camera frustum. TileEntities remain loaded.");
-        occlusionCulling = cfg.getBoolean("occlusionCulling", "render", occlusionCulling,
-                "Hide an entity/TileEntity only after solid-block ray checks prove it is fully occluded.");
-        animatedTextures = cfg.getBoolean("animatedTextures", "render", animatedTextures,
-                "Keep animation compatibility enabled; OptiFine Smart Animations manages visible animated sprites.");
+        entityCulling = cfg.getBoolean(
+                "entityCulling", "render", entityCulling,
+                "Adds conservative solid-block occlusion to entity rendering. Entities remain alive and active."
+        );
+        tileEntityCulling = cfg.getBoolean(
+                "tileEntityCulling", "render", tileEntityCulling,
+                "Frustum-culls TileEntities without unloading or changing them."
+        );
+        occlusionCulling = cfg.getBoolean(
+                "occlusionCulling", "render", occlusionCulling,
+                "Hide an entity/TileEntity only when opaque-block visibility checks prove full occlusion."
+        );
 
-        entityDistance = cfg.getInt("entityDistance", "render", entityDistance, 8, 512,
-                "Maximum distance at which AOC performs entity visibility checks.");
-        tileEntityDistance = cfg.getInt("tileEntityDistance", "render", tileEntityDistance, 8, 512,
-                "Maximum distance at which AOC performs TileEntity visibility checks.");
-        occlusionBudget = cfg.getInt("occlusionBudget", "render", occlusionBudget, 0, 64,
-                "Maximum synchronous world ray checks per client tick.");
+        entityDistance = cfg.getInt(
+                "entityDistance", "render", entityDistance, 8, 512,
+                "Maximum distance for AOC entity occlusion checks. Does not change render distance."
+        );
+        tileEntityDistance = cfg.getInt(
+                "tileEntityDistance", "render", tileEntityDistance, 8, 512,
+                "Maximum distance for AOC TileEntity occlusion checks. Does not change render distance."
+        );
+        occlusionBudget = cfg.getInt(
+                "occlusionBudget", "render", occlusionBudget, 0, 64,
+                "Maximum world ray checks consumed by AOC per client tick."
+        );
 
         if (cfg.hasChanged()) cfg.save();
     }
@@ -48,7 +57,6 @@ public final class AOCConfig {
         entityCulling = true;
         tileEntityCulling = true;
         occlusionCulling = true;
-        animatedTextures = true;
         entityDistance = 32;
         tileEntityDistance = 32;
         occlusionBudget = 16;
@@ -57,12 +65,9 @@ public final class AOCConfig {
     public static void save() {
         if (cfg == null) return;
 
-        // Write the current in-memory values back through Configuration so the
-        // Reset button and the GUI selectors persist exactly what is displayed.
         cfg.get("render", "entityCulling", entityCulling).set(entityCulling);
         cfg.get("render", "tileEntityCulling", tileEntityCulling).set(tileEntityCulling);
         cfg.get("render", "occlusionCulling", occlusionCulling).set(occlusionCulling);
-        cfg.get("render", "animatedTextures", animatedTextures).set(animatedTextures);
         cfg.get("render", "entityDistance", entityDistance).set(entityDistance);
         cfg.get("render", "tileEntityDistance", tileEntityDistance).set(tileEntityDistance);
         cfg.get("render", "occlusionBudget", occlusionBudget).set(occlusionBudget);
