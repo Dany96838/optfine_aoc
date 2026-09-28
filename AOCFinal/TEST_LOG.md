@@ -1,31 +1,26 @@
 # AOC Test Log
 
-## 2026-09-28 — audit and correction pass
+## 2026-09-28 — independent architecture audit
 
-### Repository audit
-- Active Gradle project identified as `AOCFinal`.
-- Found a second legacy source tree under `aocsrc` containing older AOC implementations.
-- Found checked-in Gradle/build artifacts and old version documentation.
-- Confirmed the active source and build version are now aligned at 1.2.1.
+### Problems found and corrected
+1. The mod still required OptiFine G5 at preInit. Removed the runtime requirement completely.
+2. The transformer depended on deobfuscated class names inside method descriptors. This can miss production 1.12.2 bytecode. Entity and TileEntity targets now use descriptor shape matching that does not depend on those internal class names.
+3. The animated-texture hook depended on OptiFine SmartAnimations. Removed it from the independent build instead of keeping an OptiFine API dependency hidden behind reflection.
+4. The entity hook now remains at RenderManager.shouldRender and adds only conservative solid-block occlusion; vanilla retains its normal render-distance/frustum decision.
+5. TileEntity render overload matching now covers the overloads by parameter shape.
+6. Occlusion budgeting now counts actual World.rayTraceBlocks calls, including additional traces through transparent blocks.
+7. Budget exhaustion is fail-open and is not cached as a visibility decision.
+8. The first visibility sample is the object center. Corner samples are only reached when the center is blocked.
+9. The settings screen now contains only independent AOC features; no OptiFine-only option remains.
+10. The mod description, README and source manifest now describe AOC as an independent optimizer.
 
-### Important code corrections
-1. Entity hook moved to `RenderManager.shouldRender(Entity, ICamera, double, double, double)` so AOC participates at the actual vanilla entity render decision point.
-2. Transformer now patches all matching TileEntity renderer overloads instead of returning after the first match.
-3. Transformer now logs successful hook installation and logs a warning when a target method is not found. Previous versions silently returned original bytecode on a missed target, making a non-functional build look healthy.
-4. ASM output now uses `COMPUTE_FRAMES | COMPUTE_MAXS` for safer interoperability with other legacy coremods/OptiFine transformations.
-5. Entity occlusion cache uses the entity object as the key, avoiding short-lived entity-ID reuse collisions.
-6. Occlusion cache remains bounded and invalidates on world/camera/object changes.
-7. Block occlusion now distinguishes opaque blocks from transparent/non-opaque blocks. Normal glass is traversed instead of being treated as a solid wall.
-8. World access remains on the client thread; no worker thread reads Minecraft world state.
+### API checks
+- Forge 1.12.2 provides RenderManager.shouldRender(Entity, ICamera, double, double, double).
+- Forge 1.12.2 provides four TileEntityRendererDispatcher.render overloads.
+- Minecraft 1.12.2 uses World.rayTraceBlocks; ClipContext is not used.
+- Forge Configuration supports the integer ranges used by the GUI/config.
 
-### Compatibility references checked
-- Forge 1.12.2 exposes `RenderManager.shouldRender(Entity, ICamera, double, double, double)`.
-- Forge 1.12.2 exposes the four TileEntityRendererDispatcher render overloads used by the active transformer.
-- Forge 1.12.2 exposes `TextureAtlasSprite.updateAnimation()`.
-- Minecraft 1.12.2 uses `World.rayTraceBlocks`; `ClipContext` is not a 1.12.2 API.
-
-### Verification status
-- GitHub Actions Java 8 Gradle build: previously passed for 1.2.1; a fresh build is required after this correction pass.
-- Minecraft runtime test after this correction pass: not performed in this environment.
-- OptiFine G5 runtime test after this correction pass: not performed in this environment.
-- FPS improvement: must be measured by the user in the actual target setup; it must not be claimed from compilation alone.
+### Build/runtime status
+- Fresh post-change Gradle build: pending final workflow result.
+- Minecraft runtime test after this audit: not available in this environment.
+- FPS improvement: not claimed until measured on the target device/modpack.
