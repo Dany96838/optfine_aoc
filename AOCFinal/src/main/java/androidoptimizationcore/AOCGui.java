@@ -50,17 +50,17 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
         // Real draggable OptiFine-style numeric controls.
         buttonList.add(new GuiSlider(5, left, y + step * 2, bw, bh,
                 I18n.format("key.aoc.entity_distance") + ": ",
-                " blocks", 8.0D, 512.0D, AOCConfig.entityDistance,
+                " " + I18n.format("key.aoc.unit.blocks"), 8.0D, 512.0D, AOCConfig.entityDistance,
                 false, true, this));
 
         buttonList.add(new GuiSlider(6, right, y + step * 2, bw, bh,
                 I18n.format("key.aoc.tile_distance") + ": ",
-                " blocks", 8.0D, 512.0D, AOCConfig.tileEntityDistance,
+                " " + I18n.format("key.aoc.unit.blocks"), 8.0D, 512.0D, AOCConfig.tileEntityDistance,
                 false, true, this));
 
         buttonList.add(new GuiSlider(7, left, y + step * 3, bw, bh,
                 I18n.format("key.aoc.occlusion_budget") + ": ",
-                " checks", 0.0D, 64.0D, AOCConfig.occlusionBudget,
+                " " + I18n.format("key.aoc.unit.checks"), 0.0D, 64.0D, AOCConfig.occlusionBudget,
                 false, true, this));
 
         buttonList.add(new GuiButton(8, right, y + step * 3, bw, bh,
