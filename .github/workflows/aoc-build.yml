@@ -27,3 +27,9 @@ jobs:
 
       - name: Build
         run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Upload built JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: aoc-build
+          path: AOCFinal/build/libs/*.jar
