@@ -1,6 +1,6 @@
-Android Optimization Core 1.2.1
+Android Optimization Core 1.3.0
 Target: Minecraft 1.12.2 / Forge 14.23.5.2864 / Java 8
-OptiFine runtime requirement: OptiFine_1.12.2_HD_U_G5
+OptiFine: optional compatibility target; not a dependency
 
 Active source project:
   AOCFinal
@@ -9,13 +9,16 @@ Build:
   ./gradlew clean build --no-daemon
 
 Produced JAR:
-  build/libs/AndroidOptimizationCore-1.2.1.jar
+  build/libs/AndroidOptimizationCore-1.3.0.jar
 
-Safety design:
+Optimization design:
+- Independent Forge client-side coremod.
+- Entity hook uses the RenderManager.shouldRender method shape so it remains usable with obfuscated 1.12.2 bytecode.
+- TileEntity hook identifies render overloads by descriptor shape rather than deobfuscated class names.
 - World access for occlusion remains on the Minecraft client thread.
-- Entity decisions are injected at RenderManager.shouldRender.
-- TileEntity decisions cover all matching TileEntityRendererDispatcher.render overloads.
-- Occlusion is fail-open and bounded per client tick.
+- Center visibility is tested before corner samples.
+- The configured budget counts actual World.rayTraceBlocks calls.
 - Transparent/non-opaque blocks are not treated as solid occluders.
+- Occlusion is fail-open.
 - Culling affects rendering only; it does not remove entities, unload chunks, or change server/game state.
-- Transformer failures are logged and fail open.
+- OptiFine is not referenced by the active optimization code.
