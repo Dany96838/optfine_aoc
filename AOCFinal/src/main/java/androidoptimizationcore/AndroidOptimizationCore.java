@@ -13,6 +13,7 @@ import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import net.minecraftforge.client.event.RenderWorldLastEvent;
 import org.lwjgl.input.Keyboard;
 
 @Mod(modid=AndroidOptimizationCore.MOD_ID,name=AndroidOptimizationCore.NAME,version=AndroidOptimizationCore.VERSION,clientSideOnly=true,dependencies="required-after:forge@[14.23.5.2864,);after:optifine")
@@ -36,6 +37,11 @@ public final class AndroidOptimizationCore {
 
     public static final class ClientEvents {
         private boolean lastF6;
+
+        @SubscribeEvent
+        public void renderTick(RenderWorldLastEvent event) {
+            RenderCullingEngine.updateCamera();
+        }
 
         @SubscribeEvent
         public void tick(TickEvent.ClientTickEvent event) {
