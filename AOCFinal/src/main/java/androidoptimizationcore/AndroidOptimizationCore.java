@@ -18,7 +18,7 @@ import org.lwjgl.input.Keyboard;
 @Mod(modid=AndroidOptimizationCore.MOD_ID,name=AndroidOptimizationCore.NAME,version=AndroidOptimizationCore.VERSION,clientSideOnly=true,dependencies="required-after:forge@[14.23.5.2864,);after:optifine")
 public final class AndroidOptimizationCore {
     public static final String MOD_ID="androidoptimizationcore";
-    public static final String NAME="Android Optimization Core";
+    public static final String NAME="Android Optimization Core - OptiFine Addon";
     public static final String VERSION="1.2.0";
 
     private static final int AOC_VIDEO_BUTTON_ID = 0xA0C0;
