@@ -336,7 +336,6 @@ public final class RenderCullingEngine {
         if (remainingChecks <= 0) {
             return RayResult.BUDGET_EXHAUSTED;
         }
-        remainingChecks--;
 
         double sx = startX;
         double sy = startY;
@@ -353,6 +352,11 @@ public final class RenderCullingEngine {
         final double advance = 0.002D;
 
         for (int i = 0; i < maxTransparentHits; i++) {
+            if (remainingChecks <= 0) {
+                return RayResult.BUDGET_EXHAUSTED;
+            }
+            remainingChecks--;
+
             RayTraceResult hit = world.rayTraceBlocks(
                     new Vec3d(sx, sy, sz),
                     new Vec3d(endX, endY, endZ),
