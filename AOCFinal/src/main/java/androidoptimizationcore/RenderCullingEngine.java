@@ -50,7 +50,8 @@ public final class RenderCullingEngine {
     }
 
     public static boolean shouldCullEntity(Entity e) {
-        if (!AOCConfig.entityCulling || e == null) return false;
+        try {
+            if (!AOCConfig.entityCulling || e == null) return false;
 
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.world == null || e == mc.getRenderViewEntity()) return false;
@@ -64,9 +65,13 @@ public final class RenderCullingEngine {
             return false;
         }
         return requestOrUseOcclusion(mc.world, entityKey(e), box, null);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     public static boolean shouldCullTileEntity(TileEntity te) {
+        try {
         if (!AOCConfig.tileEntityCulling || te == null) return false;
 
         Minecraft mc = Minecraft.getMinecraft();
@@ -91,6 +96,9 @@ public final class RenderCullingEngine {
             return false;
         }
         return requestOrUseOcclusion(mc.world, tileKey(te), box, pos);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static long entityKey(Entity e) {
