@@ -19,7 +19,7 @@ import org.lwjgl.input.Keyboard;
 public final class AndroidOptimizationCore {
     public static final String MOD_ID="androidoptimizationcore";
     public static final String NAME="Android Optimization Core - OptiFine Addon";
-    public static final String VERSION="1.2.0";
+    public static final String VERSION="1.2.1";
 
     private static final int AOC_VIDEO_BUTTON_ID = 0xA0C0;
 
@@ -65,8 +65,6 @@ public final class AndroidOptimizationCore {
             GuiScreen screen = event.getGui();
             if (!(screen instanceof GuiVideoSettings)) return;
 
-            // OptiFine 1.12.2 uses button id 210 for "Reset Video Settings".
-            // Place AOC immediately beside that button instead of using a fixed Y.
             GuiButton reset = null;
             for (Object obj : event.getButtonList()) {
                 if (!(obj instanceof GuiButton)) continue;
@@ -87,7 +85,6 @@ public final class AndroidOptimizationCore {
                         I18n.format("key.aoc.open")
                 ));
             } else {
-                // Safe fallback for environments where OptiFine changes the reset button.
                 event.getButtonList().add(new GuiButton(
                         AOC_VIDEO_BUTTON_ID,
                         screen.width / 2 - 100,
