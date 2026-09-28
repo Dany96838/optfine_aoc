@@ -10,11 +10,11 @@ key.aoc.off=Off
 key.aoc.entity_distance=Entity Radius
 key.aoc.tile_distance=TileEntity Radius
 key.aoc.occlusion_budget=Occlusion Checks/Tick
-key.aoc.animation_interval=Animation Interval
 key.aoc.tooltip.entity=Skips drawing entities outside the camera; they remain alive and active.
 key.aoc.tooltip.tile=Skips drawing TileEntities outside the camera; they remain loaded.
 key.aoc.tooltip.occlusion=Tests solid blocks and hides only objects proven fully blocked.
 key.aoc.tooltip.animations=Reduces animated texture atlas updates to lower CPU/GPU load.
 key.aoc.tooltip.distance=Sets how far AOC performs visibility checks.
 key.aoc.tooltip.budget=Limits occlusion ray traces per client tick.
-key.aoc.tooltip.interval=1 is normal; higher values reduce animation frequency.
+
+key.aoc.subtitle=Rendering optimizations for Forge 1.12.2 + OptiFine G5
