@@ -4,23 +4,26 @@ import net.minecraft.launchwrapper.IClassTransformer;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
 
 public final class AOCTransformer implements IClassTransformer {
     private static final String RM = "net.minecraft.client.renderer.entity.RenderManager";
     private static final String TE = "net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher";
-    private static final String TAS = "net.minecraft.client.renderer.texture.TextureAtlasSprite";
+
+    private static final String CULL_ENGINE = "androidoptimizationcore/RenderCullingEngine";
+    private static final String ENTITY_DESC =
+            "(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z";
 
     private static boolean loggedEntityHook;
     private static boolean loggedTileHook;
-    private static boolean loggedAnimationHook;
     private static boolean loggedEntityMiss;
     private static boolean loggedTileMiss;
-    private static boolean loggedAnimationMiss;
 
     @Override
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
         if (basicClass == null) return null;
+
         try {
             if (RM.equals(name) || RM.equals(transformedName)) {
                 return patchRenderManager(basicClass);
@@ -28,41 +31,51 @@ public final class AOCTransformer implements IClassTransformer {
             if (TE.equals(name) || TE.equals(transformedName)) {
                 return patchTileDispatcher(basicClass);
             }
-            if (TAS.equals(name) || TAS.equals(transformedName)) {
-                return patchTextureAtlasSprite(basicClass);
-            }
         } catch (Throwable t) {
             System.out.println("[AOC] Transformer failure for " + name + " / " + transformedName + ": " + t);
             t.printStackTrace();
             return basicClass;
         }
+
         return basicClass;
     }
 
     private byte[] patchRenderManager(byte[] bytes) {
         ClassNode cn = read(bytes);
-        boolean patchedShouldRender = false;
+        MethodNode target = null;
 
         for (MethodNode m : cn.methods) {
-            if (!"(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z".equals(m.desc)) continue;
+            if (ENTITY_DESC.equals(m.desc)) {
+                target = m;
+                break;
+            }
 
-            insertEntityShouldRenderHook(m);
-            patchedShouldRender = true;
-            break;
+            // Production 1.12.2 bytecode is obfuscated, so the descriptor can
+            // also contain obfuscated class names. Match the method by shape:
+            // (object, object, double, double, double) -> boolean.
+            if (isEntityShouldRenderShape(m.desc)) {
+                target = m;
+                break;
+            }
         }
 
-        if (!patchedShouldRender) {
+        if (target == null) {
             if (!loggedEntityMiss) {
                 loggedEntityMiss = true;
-                System.out.println("[AOC] WARNING: RenderManager.shouldRender hook target was not found.");
+                System.out.println("[AOC] WARNING: RenderManager.shouldRender target was not found.");
             }
             return bytes;
         }
 
+        if (!containsHook(target, "shouldCullEntity")) {
+            insertEntityShouldRenderHook(target);
+        }
+
         if (!loggedEntityHook) {
             loggedEntityHook = true;
-            System.out.println("[AOC] PATCHED RenderManager.shouldRender");
+            System.out.println("[AOC] PATCHED RenderManager.shouldRender (descriptor/shape match)");
         }
+
         return write(cn);
     }
 
@@ -71,11 +84,8 @@ public final class AOCTransformer implements IClassTransformer {
         int patched = 0;
 
         for (MethodNode m : cn.methods) {
-            if (!("render".equals(m.name)
-                    || "func_192854_a".equals(m.name)
-                    || "func_192855_a".equals(m.name))) continue;
-            if (!m.desc.startsWith("(Lnet/minecraft/tileentity/TileEntity;")) continue;
-            if (!m.desc.endsWith(")V")) continue;
+            if (!isTileRenderShape(m.desc)) continue;
+            if (containsHook(m, "shouldCullTileEntity")) continue;
 
             insertTileHook(m);
             patched++;
@@ -84,46 +94,83 @@ public final class AOCTransformer implements IClassTransformer {
         if (patched == 0) {
             if (!loggedTileMiss) {
                 loggedTileMiss = true;
-                System.out.println("[AOC] WARNING: TileEntityRendererDispatcher render hook target was not found.");
+                System.out.println("[AOC] WARNING: TileEntityRendererDispatcher render targets were not found.");
             }
             return bytes;
         }
 
         if (!loggedTileHook) {
             loggedTileHook = true;
-            System.out.println("[AOC] PATCHED TileEntityRendererDispatcher.render overloads: " + patched);
+            System.out.println("[AOC] PATCHED TileEntityRendererDispatcher render overloads: " + patched);
         }
+
         return write(cn);
     }
 
-    private byte[] patchTextureAtlasSprite(byte[] bytes) {
-        ClassNode cn = read(bytes);
+    private static boolean isEntityShouldRenderShape(String desc) {
+        Type[] args;
+        try {
+            args = Type.getArgumentTypes(desc);
+        } catch (Throwable ignored) {
+            return false;
+        }
 
-        for (MethodNode m : cn.methods) {
-            if (!("updateAnimation".equals(m.name) || "func_94219_l".equals(m.name))) continue;
-            if (!"()V".equals(m.desc)) continue;
+        if (Type.getReturnType(desc).getSort() != Type.BOOLEAN) return false;
+        if (args.length != 5) return false;
 
-            insertAnimationHook(m);
+        return args[0].getSort() == Type.OBJECT
+                && args[1].getSort() == Type.OBJECT
+                && args[2].getSort() == Type.DOUBLE
+                && args[3].getSort() == Type.DOUBLE
+                && args[4].getSort() == Type.DOUBLE;
+    }
 
-            if (!loggedAnimationHook) {
-                loggedAnimationHook = true;
-                System.out.println("[AOC] PATCHED TextureAtlasSprite.updateAnimation");
+    private static boolean isTileRenderShape(String desc) {
+        Type[] args;
+        try {
+            args = Type.getArgumentTypes(desc);
+        } catch (Throwable ignored) {
+            return false;
+        }
+
+        if (Type.getReturnType(desc).getSort() != Type.VOID) return false;
+        if (args.length < 4 || args.length > 7) return false;
+        if (args[0].getSort() != Type.OBJECT) return false;
+
+        // All parameters after TileEntity in the four render overloads are
+        // primitives: doubles/floats and, for destroy stage, an int.
+        for (int i = 1; i < args.length; i++) {
+            int sort = args[i].getSort();
+            if (sort != Type.DOUBLE && sort != Type.FLOAT && sort != Type.INT) {
+                return false;
             }
-            return write(cn);
         }
 
-        if (!loggedAnimationMiss) {
-            loggedAnimationMiss = true;
-            System.out.println("[AOC] WARNING: TextureAtlasSprite.updateAnimation hook target was not found.");
+        return true;
+    }
+
+    private static boolean containsHook(MethodNode method, String methodName) {
+        for (AbstractInsnNode insn = method.instructions.getFirst();
+             insn != null;
+             insn = insn.getNext()) {
+
+            if (!(insn instanceof MethodInsnNode)) continue;
+
+            MethodInsnNode call = (MethodInsnNode) insn;
+            if (Opcodes.INVOKESTATIC == call.getOpcode()
+                    && CULL_ENGINE.equals(call.owner)
+                    && methodName.equals(call.name)) {
+                return true;
+            }
         }
-        return bytes;
+
+        return false;
     }
 
     private static void insertEntityShouldRenderHook(MethodNode m) {
         InsnList hook = new InsnList();
         LabelNode pass = new LabelNode();
 
-        // Entity argument is local variable 1.
         hook.add(new VarInsnNode(Opcodes.ALOAD, 1));
         hook.add(new VarInsnNode(Opcodes.ALOAD, 2));
         hook.add(new VarInsnNode(Opcodes.DLOAD, 3));
@@ -132,7 +179,7 @@ public final class AOCTransformer implements IClassTransformer {
 
         hook.add(new MethodInsnNode(
                 Opcodes.INVOKESTATIC,
-                "androidoptimizationcore/RenderCullingEngine",
+                CULL_ENGINE,
                 "shouldCullEntity",
                 "(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z",
                 false
@@ -153,30 +200,12 @@ public final class AOCTransformer implements IClassTransformer {
         hook.add(new VarInsnNode(Opcodes.ALOAD, 1));
         hook.add(new MethodInsnNode(
                 Opcodes.INVOKESTATIC,
-                "androidoptimizationcore/RenderCullingEngine",
+                CULL_ENGINE,
                 "shouldCullTileEntity",
                 "(Lnet/minecraft/tileentity/TileEntity;)Z",
                 false
         ));
-        hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
-        hook.add(new InsnNode(Opcodes.RETURN));
-        hook.add(pass);
 
-        m.instructions.insert(hook);
-    }
-
-    private static void insertAnimationHook(MethodNode m) {
-        InsnList hook = new InsnList();
-        LabelNode pass = new LabelNode();
-
-        hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
-        hook.add(new MethodInsnNode(
-                Opcodes.INVOKESTATIC,
-                "androidoptimizationcore/AnimatedTextureController",
-                "shouldSkipAtlasUpdate",
-                "(Lnet/minecraft/client/renderer/texture/TextureAtlasSprite;)Z",
-                false
-        ));
         hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
         hook.add(new InsnNode(Opcodes.RETURN));
         hook.add(pass);
@@ -191,8 +220,6 @@ public final class AOCTransformer implements IClassTransformer {
     }
 
     private static byte[] write(ClassNode node) {
-        // COMPUTE_FRAMES is safer when another coremod/OptiFine has already
-        // modified the same method and changed its control-flow graph.
         ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
         return writer.toByteArray();
