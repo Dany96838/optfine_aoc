@@ -19,9 +19,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Conservative renderer-side culling.
  *
- * World/entity access stays on the client thread. The worker only publishes
- * already-computed boolean cache results, so Minecraft world state is never
- * touched from the worker thread.
+ * World/entity access and cache publication stay on the client thread; no
+ * Minecraft world state is touched from a worker thread.
  */
 public final class RenderCullingEngine {
     private static final Map<Long, CacheEntry> OCCLUSION = new ConcurrentHashMap<Long, CacheEntry>();
