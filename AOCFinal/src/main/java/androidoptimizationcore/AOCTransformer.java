@@ -44,7 +44,6 @@ public final class AOCTransformer implements IClassTransformer {
         boolean patchedShouldRender = false;
 
         for (MethodNode m : cn.methods) {
-            if (!("shouldRender".equals(m.name) || "func_188390_a".equals(m.name))) continue;
             if (!"(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z".equals(m.desc)) continue;
 
             insertEntityShouldRenderHook(m);
