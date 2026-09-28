@@ -1,0 +1,73 @@
+buildscript {
+    repositories {
+        // ForgeGradle 3.x publishes its dependencies through the legacy Forge Maven.
+        maven { url = 'https://files.minecraftforge.net/maven' }
+        jcenter()
+        mavenCentral()
+    }
+    dependencies {
+        // 3.0.166 is the last ForgeGradle 3.x line explicitly documented for
+        // Minecraft 1.12 projects in ForgeGradle issue #750.
+        classpath 'net.minecraftforge.gradle:ForgeGradle:3.0.166'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle'
+apply plugin: 'java'
+
+version = '1.2.0'
+group = 'androidoptimizationcore'
+archivesBaseName = 'AndroidOptimizationCore'
+
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
+
+minecraft {
+    mappings channel: 'stable', version: '39-1.12'
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'SCAN,REGISTRIES,REGISTRYDUMP'
+            property 'forge.logging.console.level', 'debug'
+        }
+    }
+}
+
+// Workaround documented for the 1.12.x FG3 run/dependency setup.
+configurations.all {
+    resolutionStrategy {
+        force 'org.lwjgl.lwjgl:lwjgl-platform:2.9.4-nightly-20150209'
+    }
+}
+
+repositories {
+    maven { url = 'https://maven.minecraftforge.net' }
+    mavenCentral()
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2864'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'mcversion', '1.12.2'
+    filesMatching('mcmod.info') {
+        expand version: project.version, mcversion: '1.12.2'
+    }
+}
+
+jar {
+    manifest {
+        attributes(
+            'FMLCorePlugin': 'androidoptimizationcore.AOCCorePlugin',
+            'FMLCorePluginContainsFMLMod': 'true',
+            'ForceLoadAsMod': 'true',
+            'Specification-Title': 'Android Optimization Core',
+            'Specification-Version': project.version,
+            'Implementation-Title': 'Android Optimization Core',
+            'Implementation-Version': project.version
+        )
+    }
+}
+
+jar.finalizedBy('reobfJar')

@@ -1,0 +1,41 @@
+#!/usr/bin/env sh
+set -eu
+GRADLE_VERSION=4.10.3
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+CACHE_DIR="${GRADLE_USER_HOME:-$HOME/.gradle}/aoc-bootstrap"
+DIST="$CACHE_DIR/gradle-${GRADLE_VERSION}-bin.zip"
+INSTALL="$CACHE_DIR/gradle-${GRADLE_VERSION}"
+
+if [ -z "${JAVA_HOME:-}" ]; then
+  JAVA_BIN="$(command -v java || true)"
+else
+  JAVA_BIN="$JAVA_HOME/bin/java"
+fi
+if [ -z "$JAVA_BIN" ] || [ ! -x "$JAVA_BIN" ]; then
+  echo "Java nao encontrado. Instale Java 8 e defina JAVA_HOME."
+  exit 1
+fi
+JAVA_MAJOR="$($JAVA_BIN -version 2>&1 | awk -F'[\".]' '/version/ {print $2}')"
+if [ "$JAVA_MAJOR" != "1" ]; then
+  JAVA8="$($JAVA_BIN -version 2>&1 | awk -F'[\".]' '/version/ {if ($2==8) print "yes"}')"
+else
+  JAVA8="$($JAVA_BIN -version 2>&1 | awk -F'[\".]' '/version/ {if ($3==8) print "yes"}')"
+fi
+if [ "$JAVA8" != "yes" ]; then
+  echo "Este projeto exige Java 8. JAVA_HOME/Java atual nao e Java 8."
+  exit 1
+fi
+
+mkdir -p "$CACHE_DIR"
+if [ ! -x "$INSTALL/bin/gradle" ]; then
+  if [ ! -f "$DIST" ]; then
+    echo "Baixando Gradle $GRADLE_VERSION..."
+    curl -fL --retry 3 -o "$DIST" "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+  fi
+  rm -rf "$INSTALL.tmp"
+  mkdir -p "$INSTALL.tmp"
+  unzip -q "$DIST" -d "$INSTALL.tmp"
+  mv "$INSTALL.tmp/gradle-${GRADLE_VERSION}" "$INSTALL"
+  rmdir "$INSTALL.tmp"
+fi
+exec "$INSTALL/bin/gradle" -p "$ROOT_DIR" "$@"

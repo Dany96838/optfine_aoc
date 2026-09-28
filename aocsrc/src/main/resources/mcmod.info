@@ -1,0 +1,11 @@
+[
+  {
+    "modid": "androidoptimizationcore",
+    "name": "Android Optimization Core",
+    "description": "Client-side rendering optimizations for Minecraft 1.12.2 / Android-class hardware.",
+    "version": "${version}",
+    "mcversion": "1.12.2",
+    "authorList": ["Android Optimization Core"],
+    "dependencies": ["required-after:forge@[14.23.5.2864,);after:optifine"]
+  }
+]

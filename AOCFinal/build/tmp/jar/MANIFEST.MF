@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Implementation-Title: Android Optimization Core
+Implementation-Version: 1.2.0
+FMLCorePluginContainsFMLMod: true
+Specification-Title: Android Optimization Core
+ForceLoadAsMod: true
+FMLCorePlugin: androidoptimizationcore.AOCCorePlugin
+Specification-Version: 1.2.0
+

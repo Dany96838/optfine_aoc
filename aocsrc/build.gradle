@@ -1,0 +1,47 @@
+buildscript {
+    repositories { mavenCentral(); jcenter(); maven { url = 'https://files.minecraftforge.net/maven' } }
+    dependencies { classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT' }
+}
+
+apply plugin: 'net.minecraftforge.gradle.forge'
+
+version = '1.2.0'
+group = 'androidoptimizationcore'
+archivesBaseName = 'AndroidOptimizationCore'
+
+sourceCompatibility = targetCompatibility = '1.8'
+
+minecraft {
+    version = '1.12.2-14.23.5.2864'
+    runDir = 'run'
+    mappings = 'stable_39'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // OptiFine is intentionally NOT compiled as a normal Forge dependency.
+    // G5 is a LaunchWrapper transformer/Tweaker rather than a regular Forge mod.
+    // The runtime compatibility check validates Config.VERSION == OptiFine_1.12.2_HD_U_G5.
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('mcmod.info') { expand 'version': project.version }
+}
+
+jar {
+    manifest {
+        attributes(
+            'FMLCorePlugin': 'androidoptimizationcore.AOCCorePlugin',
+            'FMLCorePluginContainsFMLMod': 'true',
+            'ForceLoadAsMod': 'true',
+            'Specification-Title': 'Android Optimization Core',
+            'Specification-Version': project.version,
+            'Implementation-Title': 'Android Optimization Core',
+            'Implementation-Version': project.version
+        )
+    }
+}

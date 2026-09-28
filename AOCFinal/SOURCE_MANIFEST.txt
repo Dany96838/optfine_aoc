@@ -1,0 +1,17 @@
+Android Optimization Core 1.2.0
+Target: Minecraft 1.12.2 / Forge 14.23.5.2864 / Java 8
+OptiFine runtime requirement: OptiFine_1.12.2_HD_U_G5
+
+Build:
+  ./gradlew setupDecompWorkspace
+  ./gradlew build
+
+The produced JAR is build/libs/AndroidOptimizationCore-1.2.0.jar
+The included gradlew bootstraps Gradle 4.10.3 because ForgeGradle 2.3 is a legacy toolchain.
+
+Safety design:
+- Worker thread never reads Minecraft World, Entity or TileEntity state.
+- Occlusion ray traces run on the client thread under a bounded per-tick budget.
+- Cache writes are asynchronous.
+- Transformer failures fail open and return the original class bytes.
+- Culling affects rendering only; it does not remove entities, unload chunks, or change server/game state.

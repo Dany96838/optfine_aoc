@@ -1,0 +1,18 @@
+Android Optimization Core 1.2.0 source package
+Forge: 14.23.5.2864
+Minecraft: 1.12.2
+OptiFine: HD U G5
+Java: 8
+
+Source files:
+- AndroidOptimizationCore.java
+- OptiFineCompat.java
+- AOCConfig.java
+- RenderCullingEngine.java
+- AnimatedTextureController.java
+- AOCCorePlugin.java
+- AOCTransformer.java
+- AOCGui.java
+- mcmod.info
+- en_us.lang
+- pt_br.lang
