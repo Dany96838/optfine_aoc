@@ -61,7 +61,7 @@ public final class RenderCullingEngine {
         AxisAlignedBB box = e.getEntityBoundingBox();
         if (box == null || !frustum.isBoundingBoxInFrustum(box.grow(0.05D))) return true;
 
-        return AOCConfig.occlusionCulling && requestOrUseOcclusion(mc.world, entityKey(e), box);
+        return AOCConfig.occlusionCulling && requestOrUseOcclusion(mc.world, entityKey(e), box, null);
     }
 
     public static boolean shouldCullTileEntity(TileEntity te) {
@@ -81,7 +81,7 @@ public final class RenderCullingEngine {
         if (dx * dx + dy * dy + dz * dz > r * r) return true;
         if (!frustum.isBoundingBoxInFrustum(box)) return true;
 
-        return AOCConfig.occlusionCulling && requestOrUseOcclusion(mc.world, tileKey(te), box);
+        return AOCConfig.occlusionCulling && requestOrUseOcclusion(mc.world, tileKey(te), box, pos);
     }
 
     private static long entityKey(Entity e) {
@@ -95,7 +95,7 @@ public final class RenderCullingEngine {
                 ^ ((long) p.getZ() * 42317861L);
     }
 
-    private static boolean requestOrUseOcclusion(World world, long key, AxisAlignedBB box) {
+    private static boolean requestOrUseOcclusion(World world, long key, AxisAlignedBB box, BlockPos targetBlock) {
         if (currentWorld != world) {
             currentWorld = world;
             OCCLUSION.clear();
@@ -114,7 +114,7 @@ public final class RenderCullingEngine {
             if (!PENDING.containsKey(key)
                     && REQUESTS.size() < Math.max(1, AOCConfig.occlusionBudget * 2)) {
                 PENDING.put(key, Boolean.TRUE);
-                REQUESTS.offer(new OcclusionRequest(world, key, box, camX, camY, camZ, tick));
+                REQUESTS.offer(new OcclusionRequest(world, key, box, targetBlock, camX, camY, camZ, tick));
             }
         }
 
@@ -141,7 +141,7 @@ public final class RenderCullingEngine {
             }
             if (r == null) break;
 
-            boolean result = computeOcclusion(r.world, r.box, r.x, r.y, r.z);
+            boolean result = computeOcclusion(r.world, r.box, r.targetBlock, r.x, r.y, r.z);
             final long key = r.key;
             final CacheEntry value = new CacheEntry(
                     result, r.tick, r.x, r.y, r.z, r.box
@@ -156,7 +156,7 @@ public final class RenderCullingEngine {
         }
     }
 
-    private static boolean computeOcclusion(World world, AxisAlignedBB b, double x, double y, double z) {
+    private static boolean computeOcclusion(World world, AxisAlignedBB b, BlockPos targetBlock, double x, double y, double z) {
         double[][] points = {
             {(b.minX + b.maxX) * .5D, (b.minY + b.maxY) * .5D, (b.minZ + b.maxZ) * .5D},
             {b.minX + .05D, b.minY + .05D, b.minZ + .05D},
@@ -172,7 +172,9 @@ public final class RenderCullingEngine {
                     false, true, false
             );
             if (hit != null && hit.typeOfHit == RayTraceResult.Type.BLOCK) {
-                blocked++;
+                if (targetBlock == null || !targetBlock.equals(hit.getBlockPos())) {
+                    blocked++;
+                }
             }
         }
         return blocked == points.length;
@@ -215,13 +217,16 @@ public final class RenderCullingEngine {
         final World world;
         final long key;
         final AxisAlignedBB box;
+        final BlockPos targetBlock;
         final double x, y, z;
         final long tick;
 
-        OcclusionRequest(World world, long key, AxisAlignedBB box, double x, double y, double z, long tick) {
+        OcclusionRequest(World world, long key, AxisAlignedBB box, BlockPos targetBlock,
+                          double x, double y, double z, long tick) {
             this.world = world;
             this.key = key;
             this.box = box;
+            this.targetBlock = targetBlock;
             this.x = x;
             this.y = y;
             this.z = z;
