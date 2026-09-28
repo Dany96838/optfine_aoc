@@ -73,7 +73,8 @@ public final class RenderCullingEngine {
         if (mc.world == null) return false;
 
         BlockPos pos = te.getPos();
-        AxisAlignedBB box = new AxisAlignedBB(pos);
+        AxisAlignedBB box = te.getRenderBoundingBox();
+        if (box == null) box = new AxisAlignedBB(pos);
 
         double dx = pos.getX() + .5D - camX;
         double dy = pos.getY() + .5D - camY;
@@ -81,7 +82,12 @@ public final class RenderCullingEngine {
         double r = AOCConfig.tileEntityDistance;
 
         if (!frustum.isBoundingBoxInFrustum(box)) return true;
-        if (!AOCConfig.occlusionCulling || dx * dx + dy * dy + dz * dz > r * r) {
+        if (!AOCConfig.occlusionCulling
+                || box == TileEntity.INFINITE_EXTENT_AABB
+                || Math.abs(box.maxX - box.minX) > 64.0D
+                || Math.abs(box.maxY - box.minY) > 64.0D
+                || Math.abs(box.maxZ - box.minZ) > 64.0D
+                || dx * dx + dy * dy + dz * dz > r * r) {
             return false;
         }
         return requestOrUseOcclusion(mc.world, tileKey(te), box, pos);
@@ -160,11 +166,19 @@ public final class RenderCullingEngine {
     }
 
     private static boolean computeOcclusion(World world, AxisAlignedBB b, BlockPos targetBlock, double x, double y, double z) {
+        double ex = Math.min(0.05D, Math.max(0.0D, (b.maxX - b.minX) * 0.25D));
+        double ey = Math.min(0.05D, Math.max(0.0D, (b.maxY - b.minY) * 0.25D));
+        double ez = Math.min(0.05D, Math.max(0.0D, (b.maxZ - b.minZ) * 0.25D));
         double[][] points = {
             {(b.minX + b.maxX) * .5D, (b.minY + b.maxY) * .5D, (b.minZ + b.maxZ) * .5D},
-            {b.minX + .05D, b.minY + .05D, b.minZ + .05D},
-            {b.maxX - .05D, b.minY + .05D, b.maxZ - .05D},
-            {b.minX + .05D, b.maxY - .05D, b.maxZ - .05D}
+            {b.minX + ex, b.minY + ey, b.minZ + ez},
+            {b.maxX - ex, b.minY + ey, b.minZ + ez},
+            {b.minX + ex, b.maxY - ey, b.minZ + ez},
+            {b.maxX - ex, b.maxY - ey, b.minZ + ez},
+            {b.minX + ex, b.minY + ey, b.maxZ - ez},
+            {b.maxX - ex, b.minY + ey, b.maxZ - ez},
+            {b.minX + ex, b.maxY - ey, b.maxZ - ez},
+            {b.maxX - ex, b.maxY - ey, b.maxZ - ez}
         };
 
         int blocked = 0;
@@ -175,9 +189,13 @@ public final class RenderCullingEngine {
                     false, true, false
             );
             if (hit != null && hit.typeOfHit == RayTraceResult.Type.BLOCK) {
-                if (targetBlock == null || !targetBlock.equals(hit.getBlockPos())) {
-                    blocked++;
+                if (targetBlock != null && targetBlock.equals(hit.getBlockPos())) {
+                    continue;
                 }
+                if (new BlockPos(x, y, z).equals(hit.getBlockPos())) {
+                    continue;
+                }
+                blocked++;
             }
         }
         return blocked == points.length;
