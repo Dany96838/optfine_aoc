@@ -1,35 +1,30 @@
-name: AOC Build Test
+name: AOC Forge 1.12.2 Build
 
 on:
   push:
-    branches: [ main ]
+    paths:
+      - 'AOCFinal/**'
+      - '.github/workflows/aoc-build.yml'
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: AOCFinal
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Java 8
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '8'
-          cache: gradle
-
-      - name: Make Gradle executable
-        run: chmod +x gradlew
-
       - name: Build
-        run: ./gradlew build --no-daemon --stacktrace
-
-      - name: Upload built JAR
+        run: ./gradlew clean build --no-daemon
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: aoc-build
+          name: AndroidOptimizationCore-build
           path: AOCFinal/build/libs/*.jar
