@@ -1,15 +1,14 @@
 [
   {
     "modid": "androidoptimizationcore",
-    "name": "Android Optimization Core - OptiFine Addon",
-    "description": "Unofficial client-side OptiFine addon for Minecraft 1.12.2, designed especially for Android/PojavLauncher while also usable on PC. Adds entity and TileEntity frustum culling, solid-block occlusion culling, configurable visibility ranges, occlusion budgeting, and OptiFine-compatible animated-texture optimization. Options: Entity Culling hides off-screen entities without removing them; TileEntity Culling hides off-screen block entities without unloading them; Block Occlusion hides objects only when solid blocks fully block all visibility samples; Entity/TileEntity Visibility Range controls how far AOC performs extra visibility checks; Occlusion Checks/Tick limits ray checks per client tick; Animated Textures optimizes off-screen animated sprites while preserving visible animations. F6 opens the AOC settings. Requires OptiFine 1.12.2 HD U G5.",
+    "name": "Android Optimization Core",
+    "description": "Independent client-side optimization mod for Minecraft 1.12.2 and Forge 14.23.5.2864. Designed for Android/PojavLauncher-class hardware while remaining usable on PC. AOC improves rendering performance through conservative entity and TileEntity culling, solid-block occlusion checks, configurable visibility ranges, and a bounded per-tick ray budget. Objects are never deleted, unloaded, frozen, or changed in game/server state. Occlusion is fail-open: AOC hides an object only when solid blocks fully block its sampled visibility points. OptiFine is optional; AOC does not depend on OptiFine APIs and is designed to coexist with it when present. Press F6 to open AOC settings.",
     "version": "${version}",
     "mcversion": "1.12.2",
     "authorList": ["Android Optimization Core"],
     "clientSideOnly": true,
     "dependencies": [
-      "required-after:forge@[14.23.5.2864,)",
-      "after:optifine"
+      "required-after:forge@[14.23.5.2864,)"
     ]
   }
 ]
