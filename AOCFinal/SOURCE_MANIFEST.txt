@@ -1,17 +1,21 @@
-Android Optimization Core 1.2.0
+Android Optimization Core 1.2.1
 Target: Minecraft 1.12.2 / Forge 14.23.5.2864 / Java 8
 OptiFine runtime requirement: OptiFine_1.12.2_HD_U_G5
 
-Build:
-  ./gradlew setupDecompWorkspace
-  ./gradlew build
+Active source project:
+  AOCFinal
 
-The produced JAR is build/libs/AndroidOptimizationCore-1.2.0.jar
-The included gradlew bootstraps Gradle 4.10.3 because ForgeGradle 2.3 is a legacy toolchain.
+Build:
+  ./gradlew clean build --no-daemon
+
+Produced JAR:
+  build/libs/AndroidOptimizationCore-1.2.1.jar
 
 Safety design:
-- Worker thread never reads Minecraft World, Entity or TileEntity state.
-- Occlusion ray traces run on the client thread under a bounded per-tick budget.
-- Cache writes are asynchronous.
-- Transformer failures fail open and return the original class bytes.
+- World access for occlusion remains on the Minecraft client thread.
+- Entity decisions are injected at RenderManager.shouldRender.
+- TileEntity decisions cover all matching TileEntityRendererDispatcher.render overloads.
+- Occlusion is fail-open and bounded per client tick.
+- Transparent/non-opaque blocks are not treated as solid occluders.
 - Culling affects rendering only; it does not remove entities, unload chunks, or change server/game state.
+- Transformer failures are logged and fail open.
