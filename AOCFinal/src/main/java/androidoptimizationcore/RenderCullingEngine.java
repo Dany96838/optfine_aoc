@@ -56,8 +56,6 @@ public final class RenderCullingEngine {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.world == null || e == mc.getRenderViewEntity()) return false;
 
-        updateCamera();
-
         double r = AOCConfig.entityDistance;
         if (e.getDistanceSq(camX, camY, camZ) > r * r) return true;
 
@@ -72,8 +70,6 @@ public final class RenderCullingEngine {
 
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.world == null) return false;
-
-        updateCamera();
 
         BlockPos pos = te.getPos();
         AxisAlignedBB box = new AxisAlignedBB(pos);
@@ -134,6 +130,11 @@ public final class RenderCullingEngine {
         updateCamera();
 
         int budget = AOCConfig.occlusionBudget;
+        if (budget <= 0) {
+            synchronized (REQUESTS) { REQUESTS.clear(); }
+            PENDING.clear();
+            return;
+        }
         while (budget-- > 0) {
             OcclusionRequest r;
             synchronized (REQUESTS) {
