@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * AOC settings screen using the same compact two-column layout as the
- * vanilla/OptiFine video settings screen.
+ * vanilla video settings screen.
  *
  * Numeric options use Forge's 1.12.2 GuiSlider, so they are real draggable
  * selectors rather than click-to-cycle buttons.
