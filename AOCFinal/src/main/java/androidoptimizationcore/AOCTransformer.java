@@ -9,6 +9,7 @@ import org.objectweb.asm.tree.*;
 public final class AOCTransformer implements IClassTransformer {
     private static final String RM = "net.minecraft.client.renderer.entity.RenderManager";
     private static final String TE = "net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher";
+    private static final String TAS = "net.minecraft.client.renderer.texture.TextureAtlasSprite";
 
     @Override
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
@@ -16,6 +17,7 @@ public final class AOCTransformer implements IClassTransformer {
         try {
             if (RM.equals(name) || RM.equals(transformedName)) return patchRenderManager(basicClass);
             if (TE.equals(name) || TE.equals(transformedName)) return patchTileDispatcher(basicClass);
+            if (TAS.equals(name) || TAS.equals(transformedName)) return patchTextureAtlasSprite(basicClass);
         } catch (Throwable ignored) {
             // Never make the game unloadable because an optional AOC hook could not apply.
             return basicClass;
@@ -47,6 +49,17 @@ public final class AOCTransformer implements IClassTransformer {
         return bytes;
     }
 
+    private byte[] patchTextureAtlasSprite(byte[] bytes) {
+        ClassNode cn = read(bytes);
+        for (MethodNode m : cn.methods) {
+            if (!("updateAnimation".equals(m.name) || "func_94219_l".equals(m.name))) continue;
+            if (!"()V".equals(m.desc)) continue;
+            insertAnimationHook(m);
+            return write(cn);
+        }
+        return bytes;
+    }
+
     private static void insertEntityHook(MethodNode m) {
         InsnList hook = new InsnList();
         LabelNode pass = new LabelNode();
@@ -73,6 +86,23 @@ public final class AOCTransformer implements IClassTransformer {
                 "androidoptimizationcore/RenderCullingEngine",
                 "shouldCullTileEntity",
                 "(Lnet/minecraft/tileentity/TileEntity;)Z",
+                false
+        ));
+        hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
+        hook.add(new InsnNode(Opcodes.RETURN));
+        hook.add(pass);
+        m.instructions.insert(hook);
+    }
+
+    private static void insertAnimationHook(MethodNode m) {
+        InsnList hook = new InsnList();
+        LabelNode pass = new LabelNode();
+        hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        hook.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                "androidoptimizationcore/AnimatedTextureController",
+                "shouldSkipAtlasUpdate",
+                "(Lnet/minecraft/client/renderer/texture/TextureAtlasSprite;)Z",
                 false
         ));
         hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
