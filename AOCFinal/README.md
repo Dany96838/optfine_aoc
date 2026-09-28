@@ -1,44 +1,41 @@
-# Android Optimization Core 1.2.0
+Android Optimization Core 1.2.1
 
-Client-side Forge 1.12.2 optimization core for Android/PojavLauncher-class hardware.
+Client-side Forge 1.12.2 rendering optimization core for Android/PojavLauncher-class hardware and PC.
 
-## Target
+## Exact target
 - Minecraft 1.12.2
 - Forge 14.23.5.2864
 - Java 8
-- OptiFine 1.12.2 HD U G5 (required at runtime)
+- OptiFine 1.12.2 HD U G5 (validated at runtime)
 
-## Build in GitHub Codespaces
-
-Use a Java 8 environment, then:
+## Build
+From `AOCFinal` with Java 8:
 
 ```bash
-./gradlew setupDecompWorkspace
-./gradlew build
+./gradlew clean build --no-daemon
 ```
 
-The JAR is created at:
+The compiled JAR is:
 
 ```text
-build/libs/AndroidOptimizationCore-1.2.0.jar
+build/libs/AndroidOptimizationCore-1.2.1.jar
 ```
 
-The included `gradlew` bootstraps Gradle 4.10.3 if it is not already installed.
+## Rendering design
+- Entity culling is injected into `RenderManager.shouldRender`, using the current vanilla `ICamera` and camera coordinates.
+- TileEntity culling covers all matching `TileEntityRendererDispatcher.render` overloads.
+- Block occlusion is fail-open: AOC hides an object only when all visibility samples are blocked by opaque blocks.
+- Normal glass/non-opaque blocks are treated as transparent during the visibility test.
+- Entities and TileEntities are never removed, unloaded, frozen, or changed in server/game state.
+- Occlusion ray work is synchronous and bounded by `Occlusion Checks/Tick`.
+- Cache entries expire when the camera/object changes and are bounded in size.
+- Transformer failures are logged and fail open instead of silently pretending that a hook was installed.
 
-## Features
+## Configuration
+F6 opens AOC settings. Numeric values are draggable Forge 1.12.2 sliders. Visibility ranges limit only AOC's extra occlusion checks; they do not change Minecraft/OptiFine render distance.
 
-- Entity frustum culling.
-- TileEntity frustum culling.
-- Configurable visibility radius: 8/16/32/64/128/256.
-- Conservative solid-block occlusion.
-- Bounded occlusion work per client tick.
-- Animated texture throttling.
-- Portuguese and English localization.
-- AOC menu accessible from Video Settings and F6.
-- Fail-open ASM transformer.
+## Repository layout
+`AOCFinal` is the only active Gradle project. Older `aocsrc` files and checked-in build artifacts are legacy/reference material and are not part of the active Gradle source set.
 
-## Important implementation choice
-
-AOC does not access Minecraft world/entity state from the worker thread. Ray traces are sampled on the client thread and only cache writes are dispatched to the worker. This is intentionally conservative for legacy 1.12.2 thread-safety.
-
-OptiFine is not declared as a normal Forge dependency because the 1.12.2 G5 distribution is loaded through the legacy OptiFine/LaunchWrapper path. AOC instead validates `Config.VERSION` during pre-initialization and stops with a clear error when G5 is absent or another OptiFine build is present.
+## Runtime verification
+A successful Gradle build proves compilation/package integrity, not Minecraft runtime behavior. Runtime testing must be performed with Forge 14.23.5.2864, OptiFine G5, and the intended modpack.
