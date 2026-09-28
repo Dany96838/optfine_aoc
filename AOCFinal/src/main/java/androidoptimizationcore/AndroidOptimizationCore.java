@@ -15,17 +15,22 @@ import net.minecraftforge.fml.common.gameevent.InputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
-@Mod(modid=AndroidOptimizationCore.MOD_ID,name=AndroidOptimizationCore.NAME,version=AndroidOptimizationCore.VERSION,clientSideOnly=true,dependencies="required-after:forge@[14.23.5.2864,);after:optifine")
+@Mod(
+        modid = AndroidOptimizationCore.MOD_ID,
+        name = AndroidOptimizationCore.NAME,
+        version = AndroidOptimizationCore.VERSION,
+        clientSideOnly = true,
+        dependencies = "required-after:forge@[14.23.5.2864,)"
+)
 public final class AndroidOptimizationCore {
-    public static final String MOD_ID="androidoptimizationcore";
-    public static final String NAME="Android Optimization Core - OptiFine Addon";
-    public static final String VERSION="1.2.1";
+    public static final String MOD_ID = "androidoptimizationcore";
+    public static final String NAME = "Android Optimization Core";
+    public static final String VERSION = "1.3.0";
 
     private static final int AOC_VIDEO_BUTTON_ID = 0xA0C0;
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
-        OptiFineCompat.requireG5();
         AOCConfig.load(event.getSuggestedConfigurationFile());
     }
 
@@ -48,7 +53,6 @@ public final class AndroidOptimizationCore {
         public void tick(TickEvent.ClientTickEvent event) {
             if (event.phase != TickEvent.Phase.END) return;
             RenderCullingEngine.endClientTick();
-            AnimatedTextureController.tick();
         }
 
         @SubscribeEvent
