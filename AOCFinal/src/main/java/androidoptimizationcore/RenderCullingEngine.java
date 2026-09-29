@@ -283,6 +283,29 @@ public final class RenderCullingEngine {
     }
 
 
+    /**
+     * Expands the dispatcher's vanilla TileEntity range only when AOC is
+     * enabled. A custom TileEntity renderer may provide a larger vanilla
+     * range; that larger value is always preserved.
+     */
+    public static double getTileEntityMaxRenderDistanceSquared(
+            TileEntity tileEntity) {
+        try {
+            if (tileEntity == null || !AOCConfig.tileEntityCulling) {
+                return tileEntity == null
+                        ? 0.0D
+                        : tileEntity.getMaxRenderDistanceSquared();
+            }
+
+            double vanilla = tileEntity.getMaxRenderDistanceSquared();
+            double aoc = (double) AOCConfig.tileEntityDistance
+                    * (double) AOCConfig.tileEntityDistance;
+            return Math.max(vanilla, aoc);
+        } catch (Throwable ignored) {
+            return 4096.0D;
+        }
+    }
+
     public static boolean shouldCullTileEntity(TileEntity tileEntity) {
         try {
             if (!AOCConfig.tileEntityCulling || tileEntity == null) return false;
