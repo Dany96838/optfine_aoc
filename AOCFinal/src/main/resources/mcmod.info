@@ -2,7 +2,7 @@
   {
     "modid": "androidoptimizationcore",
     "name": "Android Optimization Core",
-    "description": "Independent client-side optimization mod for Minecraft 1.12.2 and Forge 14.23.5.2864. Designed for Android/PojavLauncher-class hardware while remaining usable on PC. AOC improves rendering performance through conservative entity and TileEntity culling, solid-block occlusion checks, configurable visibility ranges, and a bounded per-tick ray budget. Objects are never deleted, unloaded, frozen, or changed in game/server state. Occlusion is fail-open: AOC hides an object only when solid blocks fully block its sampled visibility points. OptiFine is optional; AOC does not depend on OptiFine APIs and is designed to coexist with it when present. Press F6 to open AOC settings.",
+    "description": "Independent client-side optimization mod for Minecraft 1.12.2 and Forge 14.23.5.2864. Designed for Android/PojavLauncher-class hardware while remaining usable on PC. AOC improves rendering performance through conservative entity and TileEntity culling, solid-block occlusion checks, configurable visibility ranges, and a bounded per-tick ray budget. Objects are never deleted, unloaded, frozen, or changed in game/server state. Occlusion is fail-open: AOC hides an object only when solid blocks fully block its sampled visibility points. OptiFine is optional; AOC does not depend on OptiFine APIs and is designed to coexist with it when present. Press F4 to open AOC settings.",
     "version": "${version}",
     "mcversion": "1.12.2",
     "authorList": ["Android Optimization Core"],
