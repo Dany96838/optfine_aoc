@@ -57,6 +57,10 @@ processResources {
 }
 
 jar {
+    // Explicitly pin the produced archive name to the current project version.
+    // This prevents an old 1.3.0 archive name from being reused by Gradle.
+    archiveName = "${archivesBaseName}-${project.version}.jar"
+
     manifest {
         attributes(
             'FMLCorePlugin': 'androidoptimizationcore.AOCCorePlugin',
