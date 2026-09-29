@@ -75,8 +75,3 @@ jar {
 }
 
 jar.finalizedBy('reobfJar')
-
-// Always start a normal build from a clean output directory.
-// This prevents classes/JARs from a previous build from surviving into the next one.
-// Usage remains simply: ./gradlew build
-build.dependsOn(clean)
