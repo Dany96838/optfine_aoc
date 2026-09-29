@@ -54,14 +54,14 @@ jobs:
 
       - name: Publish JAR to repository
         run: |
-          mkdir -p ../releases
-          JAR="$(find build/libs -maxdepth 1 -type f -name '*.jar' | head -n 1)"
-          cp "$JAR" ../releases/AndroidOptimizationCore-1.4.0.jar
           cd ..
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git rebase origin/main
+          mkdir -p releases
+          JAR="AOCFinal/$(find AOCFinal/build/libs -maxdepth 1 -type f -name '*.jar' -printf '%f\\n' | head -n 1)"
+          cp "$JAR" releases/AndroidOptimizationCore-1.4.0.jar
           git add releases/AndroidOptimizationCore-1.4.0.jar
           git diff --cached --quiet || git commit -m "Publish AndroidOptimizationCore 1.4.0 JAR"
           git push origin HEAD:main
