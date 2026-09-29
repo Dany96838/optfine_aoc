@@ -620,10 +620,11 @@ public final class RenderCullingEngine {
         }
 
         IBlockState state = world.getBlockState(hitPos);
-        if (state == null || !state.isOpaqueCube()) {
-            // A non-opaque first hit is treated as transparent. We do not
-            // repeatedly ray trace through transparent blocks in the hot
-            // path; uncertainty is fail-open.
+        if (state == null
+                || (!state.isOpaqueCube() && !state.isFullCube())) {
+            // A non-opaque/non-full first hit is treated as transparent.
+            // We intentionally fail-open here instead of risking a false
+            // hidden object through glass or another non-solid block.
             return RayResult.VISIBLE;
         }
 
