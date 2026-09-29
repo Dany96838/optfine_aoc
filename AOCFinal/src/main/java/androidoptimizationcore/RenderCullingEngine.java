@@ -285,9 +285,9 @@ public final class RenderCullingEngine {
                             + (box.maxZ - box.minZ) * (box.maxZ - box.minZ));
 
             double forwardProjection =
-                    dx * look.xCoord
-                            + dy * look.yCoord
-                            + dz * look.zCoord;
+                    dx * look.x
+                            + dy * look.y
+                            + dz * look.z;
 
             if (forwardProjection + halfDiagonal < -0.05D) {
                 return true;
