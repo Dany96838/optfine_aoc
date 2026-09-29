@@ -625,15 +625,40 @@ public final class RenderCullingEngine {
         }
 
         IBlockState state = world.getBlockState(hitPos);
-        if (state == null
-                || (!state.isOpaqueCube() && !state.isFullCube())) {
-            // A non-opaque/non-full first hit is treated as transparent.
-            // We intentionally fail-open here instead of risking a false
-            // hidden object through glass or another non-solid block.
+        if (!isOcclusionBlockingState(world, hitPos, state)) {
+            // The occlusion policy is category-based, not ID-based:
+            // air, glass/translucent blocks and non-full blocks are treated
+            // as see-through. Unknown/custom blocks fail open unless their
+            // state itself reports a full opaque cube.
             return RayResult.VISIBLE;
         }
 
         return RayResult.BLOCKED;
+
+    }
+
+    /**
+     * Classifies a block using vanilla block-state geometry/material data,
+     * rather than a hard-coded registry/ID list. This keeps AOC generic for
+     * modded blocks: full opaque cubes can block a visibility ray; partial,
+     * transparent or otherwise uncertain shapes keep the view open.
+     */
+    private static boolean isOcclusionBlockingState(
+            World world,
+            BlockPos pos,
+            IBlockState state) {
+        if (state == null || world == null || pos == null) return false;
+
+        try {
+            if (state.getBlock().isAir(state, world, pos)) return false;
+            if (!state.isFullCube()) return false;
+
+            return state.isOpaqueCube()
+                    || (state.getMaterial() != null
+                    && state.getMaterial().isOpaque());
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static float angleChanged(float a, float b) {
@@ -783,7 +808,8 @@ public final class RenderCullingEngine {
                 double cameraY,
                 double cameraZ,
                 AxisAlignedBB box) {
-            if (now - tick > 20L) return false;
+            long maxAge = occluded ? 2L : 20L;
+            if (now - tick > maxAge) return false;
 
             double dx = cameraX - x;
             double dy = cameraY - y;
