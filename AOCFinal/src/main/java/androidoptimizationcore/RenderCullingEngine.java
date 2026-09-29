@@ -290,18 +290,13 @@ public final class RenderCullingEngine {
                 return true;
             }
 
-            if (!AOCConfig.occlusionCulling) return false;
-
-            return requestOcclusion(
-                    mc.world,
-                    PARTICLE_OCCLUSION,
-                    PARTICLE_PENDING,
-                    particle,
-                    box,
-                    null,
-                    camX,
-                    camY,
-                    camZ);
+            /*
+             * Particle occlusion is intentionally not part of this hook yet.
+             * Particles are numerous and must not consume the same ray budget
+             * used by entity/TileEntity wall occlusion. Back-camera culling
+             * above is cheap and independent of the wall-occlusion scheduler.
+             */
+            return false;
         } catch (Throwable ignored) {
             return false;
         }
