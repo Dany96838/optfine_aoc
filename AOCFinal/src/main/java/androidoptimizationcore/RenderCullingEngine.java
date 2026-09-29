@@ -41,16 +41,10 @@ public final class RenderCullingEngine {
             new HashMap<Entity, CacheEntry>();
     private static final Map<BlockPos, CacheEntry> TILE_OCCLUSION =
             new HashMap<BlockPos, CacheEntry>();
-    private static final Map<Particle, CacheEntry> PARTICLE_OCCLUSION =
-            new HashMap<Particle, CacheEntry>();
-
     private static final Map<Entity, OcclusionTask<Entity>> ENTITY_PENDING =
             new HashMap<Entity, OcclusionTask<Entity>>();
     private static final Map<BlockPos, OcclusionTask<BlockPos>> TILE_PENDING =
             new HashMap<BlockPos, OcclusionTask<BlockPos>>();
-    private static final Map<Particle, OcclusionTask<Particle>> PARTICLE_PENDING =
-            new HashMap<Particle, OcclusionTask<Particle>>();
-
     private static final ArrayDeque<OcclusionTask<?>> WORK_QUEUE =
             new ArrayDeque<OcclusionTask<?>>();
     private static final Set<Object> QUEUED =
@@ -300,10 +294,9 @@ public final class RenderCullingEngine {
             }
 
             /*
-             * Particle occlusion is intentionally not part of this hook yet.
-             * Particles are numerous and must not consume the same ray budget
-             * used by entity/TileEntity wall occlusion. Back-camera culling
-             * above is cheap and independent of the wall-occlusion scheduler.
+             * Particle wall occlusion is intentionally deferred to the
+             * particle stage. Particles do not enter the entity/TileEntity
+             * wall-occlusion queue or consume its ray budget.
              */
             return false;
         } catch (Throwable ignored) {
@@ -529,8 +522,6 @@ public final class RenderCullingEngine {
                 loggedTileCull = true;
                 System.out.println("[AOC] TileEntity block-occlusion culling is active.");
             }
-        } else if (task.key instanceof Particle) {
-            PARTICLE_OCCLUSION.put((Particle) task.key, entry);
         }
     }
 
@@ -539,8 +530,6 @@ public final class RenderCullingEngine {
             ENTITY_PENDING.remove((Entity) task.key);
         } else if (task.key instanceof BlockPos) {
             TILE_PENDING.remove((BlockPos) task.key);
-        } else if (task.key instanceof Particle) {
-            PARTICLE_PENDING.remove((Particle) task.key);
         }
     }
 
@@ -548,10 +537,8 @@ public final class RenderCullingEngine {
         currentWorld = world;
         ENTITY_OCCLUSION.clear();
         TILE_OCCLUSION.clear();
-        PARTICLE_OCCLUSION.clear();
         ENTITY_PENDING.clear();
         TILE_PENDING.clear();
-        PARTICLE_PENDING.clear();
         WORK_QUEUE.clear();
         QUEUED.clear();
     }
@@ -564,14 +551,6 @@ public final class RenderCullingEngine {
                 if (entity == null || entity.isDead || entity.world != currentWorld) {
                     it.remove();
                 }
-            }
-        }
-
-        if (PARTICLE_OCCLUSION.size() > 8192) {
-            Iterator<Particle> it = PARTICLE_OCCLUSION.keySet().iterator();
-            while (it.hasNext() && PARTICLE_OCCLUSION.size() > 4096) {
-                Particle particle = it.next();
-                if (particle == null || !particle.isAlive()) it.remove();
             }
         }
 
@@ -591,7 +570,6 @@ public final class RenderCullingEngine {
             QUEUED.clear();
             ENTITY_PENDING.clear();
             TILE_PENDING.clear();
-            PARTICLE_PENDING.clear();
         }
     }
 
@@ -606,35 +584,59 @@ public final class RenderCullingEngine {
             BlockPos cameraBlock,
             BlockPos targetBlock) {
 
-        RayTraceResult hit = world.rayTraceBlocks(
-                new Vec3d(startX, startY, startZ),
-                new Vec3d(endX, endY, endZ),
-                false,
-                true,
-                false);
+        double sx = startX;
+        double sy = startY;
+        double sz = startZ;
 
-        if (hit == null || hit.typeOfHit != RayTraceResult.Type.BLOCK) {
-            return RayResult.VISIBLE;
+        /*
+         * Category-based visibility: transparent and non-full blocks are
+         * see-through. We continue the same ray past those blocks instead of
+         * maintaining a whitelist of registry IDs. The hard cap keeps chains
+         * of panes/leaves/custom transparent geometry cheap.
+         */
+        for (int pass = 0; pass < 8; pass++) {
+            RayTraceResult hit = world.rayTraceBlocks(
+                    new Vec3d(sx, sy, sz),
+                    new Vec3d(endX, endY, endZ),
+                    false,
+                    true,
+                    false);
+
+            if (hit == null || hit.typeOfHit != RayTraceResult.Type.BLOCK) {
+                return RayResult.VISIBLE;
+            }
+
+            BlockPos hitPos = hit.getBlockPos();
+            if (hitPos == null
+                    || cameraBlock.equals(hitPos)
+                    || (targetBlock != null && targetBlock.equals(hitPos))) {
+                return RayResult.VISIBLE;
+            }
+
+            IBlockState state = world.getBlockState(hitPos);
+            if (isOcclusionBlockingState(world, hitPos, state)) {
+                return RayResult.BLOCKED;
+            }
+
+            Vec3d direction = new Vec3d(endX - sx, endY - sy, endZ - sz);
+            double length = direction.lengthVector();
+            if (length <= 1.0E-4D) return RayResult.VISIBLE;
+
+            /*
+             * Move beyond the current non-blocking intersection. This lets
+             * the ray see through glass, panes, fences, slabs and similar
+             * geometry until it reaches a genuinely blocking full cube.
+             */
+            double step = Math.min(0.02D, length * 0.25D);
+            Vec3d next = hit.hitVec.add(direction.normalize().scale(step));
+            sx = next.xCoord;
+            sy = next.yCoord;
+            sz = next.zCoord;
         }
 
-        BlockPos hitPos = hit.getBlockPos();
-        if (hitPos == null
-                || cameraBlock.equals(hitPos)
-                || (targetBlock != null && targetBlock.equals(hitPos))) {
-            return RayResult.VISIBLE;
-        }
-
-        IBlockState state = world.getBlockState(hitPos);
-        if (!isOcclusionBlockingState(world, hitPos, state)) {
-            // The occlusion policy is category-based, not ID-based:
-            // air, glass/translucent blocks and non-full blocks are treated
-            // as see-through. Unknown/custom blocks fail open unless their
-            // state itself reports a full opaque cube.
-            return RayResult.VISIBLE;
-        }
-
-        return RayResult.BLOCKED;
-
+        // Too many transparent/partial intersections = uncertainty.
+        // Never hide an object on uncertainty.
+        return RayResult.VISIBLE;
     }
 
     /**
@@ -650,13 +652,23 @@ public final class RenderCullingEngine {
         if (state == null || world == null || pos == null) return false;
 
         try {
+            // Air is explicitly see-through.
             if (state.getBlock().isAir(state, world, pos)) return false;
+
+            // Slabs, fences, panes, trapdoors, stairs and other partial
+            // geometry belong to the see-through category for this stage.
             if (!state.isFullCube()) return false;
 
+            /*
+             * Full opaque cubes are the normal wall category. The material
+             * fallback also catches full blocks whose implementation reports
+             * opacity through the material rather than isOpaqueCube().
+             */
             return state.isOpaqueCube()
                     || (state.getMaterial() != null
                     && state.getMaterial().isOpaque());
         } catch (Throwable ignored) {
+            // Unknown/custom block state: fail open for mod compatibility.
             return false;
         }
     }
@@ -708,7 +720,12 @@ public final class RenderCullingEngine {
         }
 
         int sampleCount() {
-            return key instanceof Particle ? 1 : 5;
+            /*
+             * Stage 1 deliberately uses one center ray. This keeps wall
+             * occlusion cheap for large groups of mobs/items while avoiding
+             * the multi-ray cost that made the previous scheduler too slow.
+             */
+            return 1;
         }
 
         double[] sample(int index) {
@@ -761,7 +778,12 @@ public final class RenderCullingEngine {
         }
 
         boolean isStale(long now) {
-            return now - createdTick > 64L;
+            /*
+             * A large modded scene may need several ticks to pass through the
+             * bounded ray budget. Do not expire a queued visibility task
+             * before it gets a chance to finish.
+             */
+            return now - createdTick > 128L;
         }
     }
 
@@ -808,7 +830,7 @@ public final class RenderCullingEngine {
                 double cameraY,
                 double cameraZ,
                 AxisAlignedBB box) {
-            long maxAge = occluded ? 2L : 20L;
+            long maxAge = occluded ? 1L : 20L;
             if (now - tick > maxAge) return false;
 
             double dx = cameraX - x;
