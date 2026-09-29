@@ -17,11 +17,10 @@ public final class AOCOptimizationRuntime {
     private final Map<AOCOptimizationCategory, Integer> visibilityRanges =
             new EnumMap<AOCOptimizationCategory, Integer>(AOCOptimizationCategory.class);
 
-    private int entityExtraRange;
-
-    private final AOCVisualBudget visualBudget = new AOCVisualBudget(16);
+        private final AOCVisualBudget visualBudget = new AOCVisualBudget(16);
 
     private boolean entityCulling = true;
+    private boolean itemCulling = true;
     private boolean tileEntityCulling = true;
     private boolean occlusionCulling = true;
     private boolean particleCulling = true;
@@ -31,7 +30,7 @@ public final class AOCOptimizationRuntime {
         for (AOCOptimizationCategory category : AOCOptimizationCategory.values()) {
             visibilityRanges.put(category, 32);
         }
-        entityExtraRange = 0;
+        
     }
 
     public static AOCOptimizationRuntime get() {
@@ -45,6 +44,9 @@ public final class AOCOptimizationRuntime {
         switch (category) {
             case ENTITY:
                 entityCulling = enabled;
+                break;
+            case ITEM:
+                itemCulling = enabled;
                 break;
             case TILE_ENTITY:
                 tileEntityCulling = enabled;
@@ -67,6 +69,7 @@ public final class AOCOptimizationRuntime {
     public synchronized boolean isEnabled(AOCOptimizationCategory category) {
         switch (category) {
             case ENTITY: return entityCulling;
+            case ITEM: return itemCulling;
             case TILE_ENTITY: return tileEntityCulling;
             case PARTICLE: return particleCulling;
             case EFFECT: return effectCulling;
@@ -89,15 +92,7 @@ public final class AOCOptimizationRuntime {
         return value == null ? 32 : value;
     }
 
-    public synchronized void setEntityExtraRange(int blocks) {
-        entityExtraRange = clamp(blocks, 0, 128);
-    }
-
-    public synchronized int getEntityExtraRange() {
-        return entityExtraRange;
-    }
-
-    public synchronized void configureBudget(int checks) {
+        public synchronized void configureBudget(int checks) {
         visualBudget.setCapacity(clamp(checks, 0, 64));
     }
 
