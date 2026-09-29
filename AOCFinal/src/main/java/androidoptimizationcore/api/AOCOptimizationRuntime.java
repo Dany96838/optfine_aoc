@@ -89,6 +89,14 @@ public final class AOCOptimizationRuntime {
         return value == null ? 32 : value;
     }
 
+    public synchronized void setEntityExtraRange(int blocks) {
+        entityExtraRange = clamp(blocks, 0, 128);
+    }
+
+    public synchronized int getEntityExtraRange() {
+        return entityExtraRange;
+    }
+
     public synchronized void configureBudget(int checks) {
         visualBudget.setCapacity(clamp(checks, 0, 64));
     }
