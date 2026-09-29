@@ -32,6 +32,23 @@ jobs:
           distribution: temurin
           java-version: '8'
 
+      - name: Package clean source ZIP
+        run: |
+          rm -rf ../AOCFinal-source
+          mkdir -p ../AOCFinal-source
+          cp -a . ../AOCFinal-source/AOCFinal
+          rm -rf ../AOCFinal-source/AOCFinal/build
+          rm -rf ../AOCFinal-source/AOCFinal/.gradle
+          rm -rf ../AOCFinal-source/AOCFinal/run
+          cd ..
+          zip -qr AndroidOptimizationCore-1.4.0-source.zip AOCFinal-source
+
+      - name: Upload source ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidOptimizationCore-1.4.0-source
+          path: AOCFinal/../AndroidOptimizationCore-1.4.0-source.zip
+
       - name: Build
         run: ./gradlew clean build --no-daemon
 
