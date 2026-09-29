@@ -81,9 +81,14 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
                 0.0D, 64.0D, AOCConfig.occlusionBudget,
                 false, true, this));
 
-        buttonList.add(new GuiButton(11, left, y + step * 5, bw, bh,
+        buttonList.add(new GuiSlider(11, left, y + step * 5, bw, bh,
+                I18n.format("key.aoc.entity_extra_range") + ": ",
+                " " + I18n.format("key.aoc.unit.blocks"),
+                0.0D, 128.0D, AOCConfig.entityExtraRange,
+                false, true, this));
+        buttonList.add(new GuiButton(12, left, y + step * 6, bw, bh,
                 I18n.format("key.aoc.reset")));
-        buttonList.add(new GuiButton(12, right, y + step * 5, bw, bh,
+        buttonList.add(new GuiButton(13, right, y + step * 6, bw, bh,
                 I18n.format("key.aoc.done")));
     }
 
@@ -110,10 +115,10 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             case 9:
                 AOCConfig.occlusionCulling = !AOCConfig.occlusionCulling;
                 break;
-            case 11:
+            case 12:
                 AOCConfig.resetDefaults();
                 break;
-            case 12:
+            case 13:
                 AOCConfig.save();
                 mc.displayGuiScreen(parent);
                 return;
@@ -148,6 +153,10 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
                 case 10:
                     AOCConfig.occlusionBudget =
                             clampInt(slider.getValueInt(), 0, 64);
+                    break;
+                case 11:
+                    AOCConfig.entityExtraRange =
+                            clampInt(slider.getValueInt(), 0, 128);
                     break;
                 default:
                     return;
@@ -197,8 +206,9 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             case 7: key = "key.aoc.tooltip.effect"; break;
             case 9: key = "key.aoc.tooltip.occlusion"; break;
             case 10: key = "key.aoc.tooltip.budget"; break;
-            case 11: key = "key.aoc.tooltip.reset"; break;
-            case 12: return;
+            case 11: key = "key.aoc.tooltip.extra_range"; break;
+            case 12: key = "key.aoc.tooltip.reset"; break;
+            case 13: return;
             default: return;
         }
 
