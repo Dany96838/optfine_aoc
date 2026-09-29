@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
 import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.EntityItem;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.EntityAreaEffectCloud;
 import net.minecraft.entity.effect.EntityLightningBolt;
 import net.minecraft.entity.item.EntityFireworkRocket;
@@ -99,6 +100,8 @@ public final class RenderCullingEngine {
                 return false;
             }
 
+            if (entity instanceof EntityPlayer) return false;
+
             boolean droppedItem = entity instanceof EntityItem;
             if (droppedItem) {
                 if (!AOCConfig.itemCulling) return false;
@@ -159,6 +162,7 @@ public final class RenderCullingEngine {
             double renderCamZ) {
         try {
             if (entity == null) return false;
+            if (entity instanceof EntityPlayer) return false;
 
             boolean droppedItem = entity instanceof EntityItem;
             if (droppedItem) {
