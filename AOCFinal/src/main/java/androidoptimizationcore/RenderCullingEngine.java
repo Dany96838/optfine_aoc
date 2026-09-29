@@ -7,6 +7,9 @@ import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityAreaEffectCloud;
+import net.minecraft.entity.effect.EntityLightningBolt;
+import net.minecraft.entity.item.EntityFireworkRocket;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
@@ -141,6 +144,45 @@ public final class RenderCullingEngine {
      * supplies a conservative frustum plus asynchronous solid-block
      * occlusion.
      */
+    /**
+     * Dedicated visual-effect culling for effect-like entities. This remains
+     * separate from the generic entity switch so users can optimize effects
+     * without changing the entity-culling policy.
+     */
+    public static boolean shouldCullVisualEffect(
+            Entity entity,
+            ICamera camera,
+            double renderCamX,
+            double renderCamY,
+            double renderCamZ) {
+        try {
+            if (!AOCConfig.effectCulling || entity == null) return false;
+
+            if (!(entity instanceof EntityAreaEffectCloud)
+                    && !(entity instanceof EntityLightningBolt)
+                    && !(entity instanceof EntityFireworkRocket)) {
+                return false;
+            }
+
+            AxisAlignedBB box = entity.getEntityBoundingBox();
+            if (box == null || box.hasNaN()) return false;
+
+            if (camera != null && !entity.ignoreFrustumCheck
+                    && !camera.isBoundingBoxInFrustum(box.grow(0.05D))) {
+                return true;
+            }
+
+            double dx = entity.posX - renderCamX;
+            double dy = entity.posY - renderCamY;
+            double dz = entity.posZ - renderCamZ;
+            double distance = AOCConfig.effectDistance;
+
+            return dx * dx + dy * dy + dz * dz > distance * distance;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     /**
      * ParticleManager hook. Particles beyond the configured client-side
      * visibility range or outside the camera frustum are never queued into
