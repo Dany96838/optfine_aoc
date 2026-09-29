@@ -17,7 +17,6 @@ import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 import java.util.ArrayDeque;
@@ -408,7 +407,13 @@ public final class RenderCullingEngine {
         OcclusionTask<K> existing = pending.get(key);
         if (existing != null) {
             if (!existing.isCompatible(world, startX, startY, startZ, box)) {
+                /*
+                 * The old task may still be physically present in WORK_QUEUE.
+                 * Remove that exact task before replacing it; otherwise the old
+                 * task can later remove the new pending entry for the same key.
+                 */
                 pending.remove(key);
+                WORK_QUEUE.remove(existing);
                 QUEUED.remove(key);
             } else {
                 return false;
@@ -451,6 +456,14 @@ public final class RenderCullingEngine {
                 && !WORK_QUEUE.isEmpty()) {
             OcclusionTask<?> raw = WORK_QUEUE.poll();
             if (raw == null) break;
+
+            /*
+             * A task can be superseded when the camera moves. Only the current
+             * task for a key is allowed to touch pending/queued state.
+             */
+            if (!isCurrentPendingTask(raw)) {
+                continue;
+            }
 
             QUEUED.remove(raw.key);
 
@@ -528,11 +541,33 @@ public final class RenderCullingEngine {
         }
     }
 
-    private static void removePending(OcclusionTask<?> task) {
+    private static boolean isCurrentPendingTask(OcclusionTask<?> task) {
+        if (task == null || task.key == null) return false;
+
         if (task.key instanceof Entity) {
-            ENTITY_PENDING.remove((Entity) task.key);
+            return ENTITY_PENDING.get((Entity) task.key) == task;
+        }
+
+        if (task.key instanceof BlockPos) {
+            return TILE_PENDING.get((BlockPos) task.key) == task;
+        }
+
+        return false;
+    }
+
+    private static void removePending(OcclusionTask<?> task) {
+        if (task == null || task.key == null) return;
+
+        if (task.key instanceof Entity) {
+            Entity entity = (Entity) task.key;
+            if (ENTITY_PENDING.get(entity) == task) {
+                ENTITY_PENDING.remove(entity);
+            }
         } else if (task.key instanceof BlockPos) {
-            TILE_PENDING.remove((BlockPos) task.key);
+            BlockPos pos = (BlockPos) task.key;
+            if (TILE_PENDING.get(pos) == task) {
+                TILE_PENDING.remove(pos);
+            }
         }
     }
 
@@ -692,10 +727,14 @@ public final class RenderCullingEngine {
             // Anything that is not a complete cube stays in PASS_THROUGH.
             if (!state.isFullCube()) return false;
 
-            // Full opaque/material-opaque cubes are the SOLID category.
-            return state.isOpaqueCube()
-                    || (state.getMaterial() != null
-                    && state.getMaterial().isOpaque());
+            /*
+             * Minecraft's normal-cube classification is the state/category
+             * signal we want here: full solid cubes block visibility, while
+             * glass, panes, fences, slabs, stairs and other partial or
+             * transparent states remain PASS_THROUGH. No registry IDs or
+             * mod-specific lists are used.
+             */
+            return state.isNormalCube();
         } catch (Throwable ignored) {
             // Unknown custom geometry: fail open for compatibility.
             return false;
@@ -750,14 +789,12 @@ public final class RenderCullingEngine {
 
         int sampleCount() {
             /*
-             * Use one center ray for the normal fast path. AOC only hides an
-             * object after this ray is blocked by a genuinely opaque full
-             * block. The result is then retained for several ticks so a
-             * large mob group does not immediately refill the ray queue every
-             * tick. This is intentionally conservative and does not alter
-             * the already-working particle/player paths.
+             * Center first. If the center is visible, the object is visible.
+             * If the center is blocked, test four additional points before
+             * hiding it. This prevents a large/custom render box from being
+             * culled when only its center happens to be behind a solid block.
              */
-            return 1;
+            return 5;
         }
 
         double[] sample(int index) {
