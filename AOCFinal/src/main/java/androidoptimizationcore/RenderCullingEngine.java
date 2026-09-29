@@ -156,60 +156,6 @@ public final class RenderCullingEngine {
      * the configured distance plus conservative solid-block occlusion.
      */
     /**
-     * Extends the vanilla entity render-distance decision without changing
-     * entity state. This is consulted only when vanilla returned false.
-     *
-     * Vanilla 1.12.2 uses the entity bounding-box average edge length,
-     * multiplied by 64 and renderDistanceWeight as its base distance. AOC
-     * can extend that client-side decision up to the configured category range.
-     */
-    public static boolean shouldForceExtendedEntityRender(
-            Entity entity,
-            ICamera camera,
-            double renderCamX,
-            double renderCamY,
-            double renderCamZ) {
-        try {
-            if (entity == null) return false;
-
-            boolean droppedItem = entity instanceof EntityItem;
-            if (droppedItem) {
-                if (!AOCConfig.itemCulling) return false;
-            } else if (!AOCConfig.entityCulling) {
-                return false;
-            }
-
-            AxisAlignedBB box = entity.getEntityBoundingBox();
-            if (box == null || box.hasNaN()) return false;
-
-            if (camera != null && !entity.ignoreFrustumCheck
-                    && !camera.isBoundingBoxInFrustum(box.grow(0.5D))) {
-                return false;
-            }
-
-            double distanceLimit = droppedItem
-                    ? AOCConfig.itemDistance : AOCConfig.entityDistance;
-
-            double dx = entity.posX - renderCamX;
-            double dy = entity.posY - renderCamY;
-            double dz = entity.posZ - renderCamZ;
-            double distanceSq = dx * dx + dy * dy + dz * dz;
-
-            if (distanceSq >= distanceLimit * distanceLimit) {
-                return false;
-            }
-
-            // Only extend the vanilla decision when its own distance test
-            // would be the limiting factor. This keeps custom renderer
-            // behavior and frustum decisions intact as much as possible.
-            return !entity.isInRangeToRender3d(
-                    renderCamX, renderCamY, renderCamZ);
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    /**
      * Dedicated visual-effect culling for effect-like entities. This remains
      * separate from the generic entity switch so users can optimize effects
      * without changing the entity-culling policy.
