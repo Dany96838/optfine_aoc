@@ -5,6 +5,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.ClippingHelperImpl;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.culling.ICamera;
+import net.minecraft.client.particle.Particle;
 import net.minecraft.entity.Entity;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.AxisAlignedBB;
@@ -140,6 +141,44 @@ public final class RenderCullingEngine {
      * supplies a conservative frustum plus asynchronous solid-block
      * occlusion.
      */
+    /**
+     * ParticleManager hook. Particles beyond the configured client-side
+     * visibility range or outside the camera frustum are never queued into
+     * the particle manager. This is visual-only; it does not touch world
+     * state or the source event that requested the particle.
+     */
+    public static boolean shouldCullParticle(Particle particle) {
+        try {
+            if (!AOCConfig.particleCulling || particle == null) return false;
+
+            Minecraft mc = Minecraft.getMinecraft();
+            if (mc == null || mc.world == null) return false;
+
+            AxisAlignedBB box = particle.getBoundingBox();
+            if (box == null || box.hasNaN()) return false;
+
+            Entity camera = mc.getRenderViewEntity();
+            if (camera == null) return false;
+
+            double px = (box.minX + box.maxX) * 0.5D;
+            double py = (box.minY + box.maxY) * 0.5D;
+            double pz = (box.minZ + box.maxZ) * 0.5D;
+
+            double dx = px - camX;
+            double dy = py - camY;
+            double dz = pz - camZ;
+            double distance = AOCConfig.particleDistance;
+
+            if (dx * dx + dy * dy + dz * dz > distance * distance) {
+                return true;
+            }
+
+            return !tileFrustum.isBoundingBoxInFrustum(box);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     public static boolean shouldCullTileEntity(TileEntity tileEntity) {
         try {
             if (!AOCConfig.tileEntityCulling || tileEntity == null) return false;
