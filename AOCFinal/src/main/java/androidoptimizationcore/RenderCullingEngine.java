@@ -17,7 +17,6 @@ import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
@@ -577,6 +576,19 @@ public final class RenderCullingEngine {
         }
     }
 
+    /**
+     * Category-based block occlusion.
+     *
+     * This intentionally does NOT use World.rayTraceBlocks(). Instead AOC
+     * walks the voxel cells between the camera and the target and asks only
+     * one question for each cell: is this block in the SOLID occluder
+     * category? Transparent/partial blocks are the PASS_THROUGH category.
+     *
+     * This keeps modded blocks generic: no registry IDs, mod names or block
+     * blacklists are required. A wall made from a solid opaque cube blocks;
+     * glass, panes, fences, slabs, stairs and other partial/transparent
+     * geometry keep the path open.
+     */
     private static RayResult rayBlockedByOpaqueBlock(
             World world,
             double startX,
@@ -587,92 +599,105 @@ public final class RenderCullingEngine {
             double endZ,
             BlockPos cameraBlock,
             BlockPos targetBlock) {
+        if (world == null) return RayResult.VISIBLE;
 
-        double sx = startX;
-        double sy = startY;
-        double sz = startZ;
+        double dx = endX - startX;
+        double dy = endY - startY;
+        double dz = endZ - startZ;
+        double lengthSq = dx * dx + dy * dy + dz * dz;
+        if (lengthSq <= 1.0E-8D) return RayResult.VISIBLE;
 
-        /*
-         * Category-based visibility: transparent and non-full blocks are
-         * see-through. We continue the same ray past those blocks instead of
-         * maintaining a whitelist of registry IDs. The hard cap keeps chains
-         * of panes/leaves/custom transparent geometry cheap.
-         */
-        for (int pass = 0; pass < 8; pass++) {
-            RayTraceResult hit = world.rayTraceBlocks(
-                    new Vec3d(sx, sy, sz),
-                    new Vec3d(endX, endY, endZ),
-                    false,
-                    true,
-                    false);
+        int x = floorToInt(startX);
+        int y = floorToInt(startY);
+        int z = floorToInt(startZ);
+        int endCellX = floorToInt(endX);
+        int endCellY = floorToInt(endY);
+        int endCellZ = floorToInt(endZ);
 
-            if (hit == null || hit.typeOfHit != RayTraceResult.Type.BLOCK) {
+        int stepX = dx > 0.0D ? 1 : (dx < 0.0D ? -1 : 0);
+        int stepY = dy > 0.0D ? 1 : (dy < 0.0D ? -1 : 0);
+        int stepZ = dz > 0.0D ? 1 : (dz < 0.0D ? -1 : 0);
+
+        double tDeltaX = stepX == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0D / dx);
+        double tDeltaY = stepY == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0D / dy);
+        double tDeltaZ = stepZ == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0D / dz);
+
+        double nextBoundaryX = stepX > 0 ? x + 1.0D : x;
+        double nextBoundaryY = stepY > 0 ? y + 1.0D : y;
+        double nextBoundaryZ = stepZ > 0 ? z + 1.0D : z;
+
+        double tMaxX = stepX == 0
+                ? Double.POSITIVE_INFINITY
+                : (nextBoundaryX - startX) / dx;
+        double tMaxY = stepY == 0
+                ? Double.POSITIVE_INFINITY
+                : (nextBoundaryY - startY) / dy;
+        double tMaxZ = stepZ == 0
+                ? Double.POSITIVE_INFINITY
+                : (nextBoundaryZ - startZ) / dz;
+
+        // Prevent a pathological modded coordinate from becoming an endless
+        // traversal. Normal Minecraft entity distances are far below this.
+        int maxSteps = Math.min(2048,
+                4 + (int) Math.ceil(Math.sqrt(lengthSq) * 3.0D));
+
+        for (int step = 0; step < maxSteps; step++) {
+            if (x == endCellX && y == endCellY && z == endCellZ) {
                 return RayResult.VISIBLE;
             }
 
-            BlockPos hitPos = hit.getBlockPos();
-            if (hitPos == null
-                    || cameraBlock.equals(hitPos)
-                    || (targetBlock != null && targetBlock.equals(hitPos))) {
-                return RayResult.VISIBLE;
+            BlockPos pos = new BlockPos(x, y, z);
+            if (!pos.equals(cameraBlock)
+                    && (targetBlock == null || !pos.equals(targetBlock))) {
+                IBlockState state = world.getBlockState(pos);
+                if (isSolidOccluderCategory(world, pos, state)) {
+                    return RayResult.BLOCKED;
+                }
             }
 
-            IBlockState state = world.getBlockState(hitPos);
-            if (isOcclusionBlockingState(world, hitPos, state)) {
-                return RayResult.BLOCKED;
+            if (tMaxX <= tMaxY && tMaxX <= tMaxZ) {
+                x += stepX;
+                tMaxX += tDeltaX;
+            } else if (tMaxY <= tMaxZ) {
+                y += stepY;
+                tMaxY += tDeltaY;
+            } else {
+                z += stepZ;
+                tMaxZ += tDeltaZ;
             }
-
-            Vec3d direction = new Vec3d(endX - sx, endY - sy, endZ - sz);
-            double length = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
-            if (length <= 1.0E-4D) return RayResult.VISIBLE;
-
-            /*
-             * Move beyond the current non-blocking intersection. This lets
-             * the ray see through glass, panes, fences, slabs and similar
-             * geometry until it reaches a genuinely blocking full cube.
-             */
-            double step = Math.min(0.02D, length * 0.25D);
-            Vec3d next = hit.hitVec.add(direction.normalize().scale(step));
-            sx = next.x;
-            sy = next.y;
-            sz = next.z;
         }
 
-        // Too many transparent/partial intersections = uncertainty.
-        // Never hide an object on uncertainty.
+        // Uncertain traversal is always fail-open.
         return RayResult.VISIBLE;
     }
 
+    private static int floorToInt(double value) {
+        return (int) Math.floor(value);
+    }
+
     /**
-     * Classifies a block using vanilla block-state geometry/material data,
-     * rather than a hard-coded registry/ID list. This keeps AOC generic for
-     * modded blocks: full opaque cubes can block a visibility ray; partial,
-     * transparent or otherwise uncertain shapes keep the view open.
+     * SOLID category used by entity/TileEntity occlusion. The category is
+     * derived from the block state, so it works with vanilla and modded
+     * blocks without IDs or hard-coded mod lists.
      */
-    private static boolean isOcclusionBlockingState(
+    private static boolean isSolidOccluderCategory(
             World world,
             BlockPos pos,
             IBlockState state) {
         if (state == null || world == null || pos == null) return false;
 
         try {
-            // Air is explicitly see-through.
             if (state.getBlock().isAir(state, world, pos)) return false;
 
-            // Slabs, fences, panes, trapdoors, stairs and other partial
-            // geometry belong to the see-through category for this stage.
+            // Anything that is not a complete cube stays in PASS_THROUGH.
             if (!state.isFullCube()) return false;
 
-            /*
-             * Full opaque cubes are the normal wall category. The material
-             * fallback also catches full blocks whose implementation reports
-             * opacity through the material rather than isOpaqueCube().
-             */
+            // Full opaque/material-opaque cubes are the SOLID category.
             return state.isOpaqueCube()
                     || (state.getMaterial() != null
                     && state.getMaterial().isOpaque());
         } catch (Throwable ignored) {
-            // Unknown/custom block state: fail open for mod compatibility.
+            // Unknown custom geometry: fail open for compatibility.
             return false;
         }
     }
