@@ -263,6 +263,10 @@ public final class RenderCullingEngine {
              * camera. The half-diagonal margin makes this fail-open for large
              * particle bounds that cross the camera plane.
              */
+            double dx = px - camX;
+            double dy = py - camY;
+            double dz = pz - camZ;
+
             double yawRad = Math.toRadians(camYaw);
             double pitchRad = Math.toRadians(camPitch);
             double cosPitch = Math.cos(pitchRad);
