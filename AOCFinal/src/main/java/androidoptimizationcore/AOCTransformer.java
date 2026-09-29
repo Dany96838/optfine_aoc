@@ -235,6 +235,21 @@ public final class AOCTransformer implements IClassTransformer {
                 false
         ));
 
+        hook.add(new JumpInsnNode(Opcodes.IFNE, pass));
+        hook.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        hook.add(new VarInsnNode(Opcodes.ALOAD, 2));
+        hook.add(new VarInsnNode(Opcodes.DLOAD, 3));
+        hook.add(new VarInsnNode(Opcodes.DLOAD, 5));
+        hook.add(new VarInsnNode(Opcodes.DLOAD, 7));
+
+        hook.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                CULL_ENGINE,
+                "shouldCullVisualEffect",
+                "(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z",
+                false
+        ));
+
         hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
         hook.add(new InsnNode(Opcodes.ICONST_0));
         hook.add(new InsnNode(Opcodes.IRETURN));
