@@ -3,6 +3,10 @@ name: AOC Forge 1.12.2 Build
 permissions:
   contents: write
 
+concurrency:
+  group: aoc-build-main
+  cancel-in-progress: true
+
 on:
   push:
     paths:
