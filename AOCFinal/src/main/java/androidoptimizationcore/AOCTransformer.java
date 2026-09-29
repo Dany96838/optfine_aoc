@@ -190,8 +190,8 @@ public final class AOCTransformer implements IClassTransformer {
         if (args.length < 3 || args.length > 7) return false;
         if (args[0].getSort() != Type.OBJECT) return false;
 
-        // All parameters after TileEntity in the four render overloads are
-        // primitives: doubles/floats and, for destroy stage, an int.
+        // Render overload parameters after TileEntity are numeric: doubles,
+        // floats and, for destroy-stage rendering, an int.
         for (int i = 1; i < args.length; i++) {
             int sort = args[i].getSort();
             if (sort != Type.DOUBLE && sort != Type.FLOAT && sort != Type.INT) {
