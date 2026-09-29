@@ -196,6 +196,7 @@ public final class AOCTransformer implements IClassTransformer {
                 }
 
                 LabelNode render = new LabelNode();
+                LabelNode skip = new LabelNode();
                 InsnList patch = new InsnList();
 
                 for (int i = args.length - 1; i >= 0; i--) {
@@ -214,9 +215,9 @@ public final class AOCTransformer implements IClassTransformer {
                         false
                 ));
                 patch.add(new JumpInsnNode(Opcodes.IFEQ, render));
+                patch.add(new JumpInsnNode(Opcodes.GOTO, skip));
 
                 patch.add(render);
-
                 patch.add(new VarInsnNode(Opcodes.ALOAD, receiverLocal));
                 for (int i = 0; i < args.length; i++) {
                     patch.add(new VarInsnNode(
@@ -225,10 +226,7 @@ public final class AOCTransformer implements IClassTransformer {
                 }
 
                 method.instructions.insertBefore(insn, patch);
-
-                InsnList replacement = new InsnList();
-                replacement.add(insn);
-                method.instructions.insertBefore(insn, new InsnList());
+                method.instructions.insert(insn, skip);
                 patched++;
             }
 
