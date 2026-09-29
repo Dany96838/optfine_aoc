@@ -151,6 +151,48 @@ public final class RenderCullingEngine {
     }
 
     /**
+     * Keeps Vanilla's normal Render.shouldRender decision intact, but when
+     * Vanilla rejects an entity only because its normal render-distance rule
+     * is smaller than the AOC-configured range, AOC may extend visibility up
+     * to Entity Distance / Dropped Item Distance.
+     */
+    public static boolean shouldAllowEntityWithinAocDistance(
+            Entity entity,
+            ICamera camera,
+            double renderCamX,
+            double renderCamY,
+            double renderCamZ) {
+        try {
+            if (entity == null) return false;
+
+            boolean droppedItem = entity instanceof EntityItem;
+            if (droppedItem) {
+                if (!AOCConfig.itemCulling) return false;
+            } else if (!AOCConfig.entityCulling) {
+                return false;
+            }
+
+            AxisAlignedBB box = entity.getEntityBoundingBox();
+            if (box == null || box.hasNaN()) return false;
+
+            if (camera != null && !entity.ignoreFrustumCheck
+                    && !camera.isBoundingBoxInFrustum(box.grow(0.05D))) {
+                return false;
+            }
+
+            double distance = droppedItem
+                    ? AOCConfig.itemDistance : AOCConfig.entityDistance;
+            double dx = entity.posX - renderCamX;
+            double dy = entity.posY - renderCamY;
+            double dz = entity.posZ - renderCamZ;
+
+            return dx * dx + dy * dy + dz * dz <= distance * distance;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
      * TileEntities do not receive ICamera in their dispatcher API. AOC therefore
      * keeps this path independent of the renderer's frustum state and uses only
      * the configured distance plus conservative solid-block occlusion.
