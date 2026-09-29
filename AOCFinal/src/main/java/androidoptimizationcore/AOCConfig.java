@@ -1,5 +1,7 @@
 package androidoptimizationcore;
 
+import androidoptimizationcore.api.AOCOptimizationCategory;
+import androidoptimizationcore.api.AOCOptimizationRuntime;
 import net.minecraftforge.common.config.Configuration;
 
 import java.io.File;
@@ -10,8 +12,13 @@ public final class AOCConfig {
     public static boolean entityCulling = true;
     public static boolean tileEntityCulling = true;
     public static boolean occlusionCulling = true;
+    public static boolean particleCulling = true;
+    public static boolean effectCulling = true;
+
     public static int entityDistance = 32;
     public static int tileEntityDistance = 32;
+    public static int particleDistance = 32;
+    public static int effectDistance = 32;
     public static int occlusionBudget = 16;
 
     private AOCConfig() {}
@@ -26,40 +33,86 @@ public final class AOCConfig {
 
         entityCulling = cfg.getBoolean(
                 "entityCulling", "render", entityCulling,
-                "Adds conservative solid-block occlusion to entity rendering. Entities remain alive and active."
+                "Client-side entity visibility optimization. Does not change entity logic."
         );
         tileEntityCulling = cfg.getBoolean(
                 "tileEntityCulling", "render", tileEntityCulling,
-                "Frustum-culls TileEntities without unloading or changing them."
+                "Client-side TileEntity visibility optimization."
         );
         occlusionCulling = cfg.getBoolean(
                 "occlusionCulling", "render", occlusionCulling,
-                "Hide an entity/TileEntity only when opaque-block visibility checks prove full occlusion."
+                "Client-side opaque-block visibility checks."
+        );
+        particleCulling = cfg.getBoolean(
+                "particleCulling", "render", particleCulling,
+                "Client-side particle visibility optimization."
+        );
+        effectCulling = cfg.getBoolean(
+                "effectCulling", "render", effectCulling,
+                "Client-side visual-effect visibility optimization."
         );
 
         entityDistance = cfg.getInt(
-                "entityDistance", "render", entityDistance, 8, 512,
-                "Maximum distance for AOC entity occlusion checks. Does not change render distance."
+                "entityDistance", "render", entityDistance, 8, 640,
+                "Maximum AOC client-side entity visibility range."
         );
         tileEntityDistance = cfg.getInt(
-                "tileEntityDistance", "render", tileEntityDistance, 8, 512,
-                "Maximum distance for AOC TileEntity occlusion checks. Does not change render distance."
+                "tileEntityDistance", "render", tileEntityDistance, 8, 640,
+                "Maximum AOC client-side TileEntity visibility range."
+        );
+        particleDistance = cfg.getInt(
+                "particleDistance", "render", particleDistance, 8, 160,
+                "Maximum AOC client-side particle visibility range."
+        );
+        effectDistance = cfg.getInt(
+                "effectDistance", "render", effectDistance, 8, 160,
+                "Maximum AOC client-side visual-effect visibility range."
         );
         occlusionBudget = cfg.getInt(
                 "occlusionBudget", "render", occlusionBudget, 0, 64,
-                "Maximum world ray checks consumed by AOC per client tick."
+                "Maximum optional AOC world visibility checks per client tick."
         );
 
+        applyToRuntime();
+
         if (cfg.hasChanged()) cfg.save();
+    }
+
+    public static void applyToRuntime() {
+        AOCOptimizationRuntime runtime = AOCOptimizationRuntime.get();
+
+        runtime.setEnabled(AOCOptimizationCategory.ENTITY, entityCulling);
+        runtime.setEnabled(AOCOptimizationCategory.TILE_ENTITY, tileEntityCulling);
+        runtime.setEnabled(AOCOptimizationCategory.BLOCK_VISUAL, occlusionCulling);
+        runtime.setEnabled(AOCOptimizationCategory.PARTICLE, particleCulling);
+        runtime.setEnabled(AOCOptimizationCategory.EFFECT, effectCulling);
+
+        runtime.setVisibilityRange(
+                AOCOptimizationCategory.ENTITY, entityDistance);
+        runtime.setVisibilityRange(
+                AOCOptimizationCategory.TILE_ENTITY, tileEntityDistance);
+        runtime.setVisibilityRange(
+                AOCOptimizationCategory.PARTICLE, particleDistance);
+        runtime.setVisibilityRange(
+                AOCOptimizationCategory.EFFECT, effectDistance);
+
+        runtime.configureBudget(occlusionBudget);
     }
 
     public static void resetDefaults() {
         entityCulling = true;
         tileEntityCulling = true;
         occlusionCulling = true;
+        particleCulling = true;
+        effectCulling = true;
+
         entityDistance = 32;
         tileEntityDistance = 32;
+        particleDistance = 32;
+        effectDistance = 32;
         occlusionBudget = 16;
+
+        applyToRuntime();
     }
 
     public static void save() {
@@ -68,9 +121,16 @@ public final class AOCConfig {
         cfg.get("render", "entityCulling", entityCulling).set(entityCulling);
         cfg.get("render", "tileEntityCulling", tileEntityCulling).set(tileEntityCulling);
         cfg.get("render", "occlusionCulling", occlusionCulling).set(occlusionCulling);
+        cfg.get("render", "particleCulling", particleCulling).set(particleCulling);
+        cfg.get("render", "effectCulling", effectCulling).set(effectCulling);
+
         cfg.get("render", "entityDistance", entityDistance).set(entityDistance);
         cfg.get("render", "tileEntityDistance", tileEntityDistance).set(tileEntityDistance);
+        cfg.get("render", "particleDistance", particleDistance).set(particleDistance);
+        cfg.get("render", "effectDistance", effectDistance).set(effectDistance);
         cfg.get("render", "occlusionBudget", occlusionBudget).set(occlusionBudget);
+
+        applyToRuntime();
 
         if (cfg.hasChanged()) cfg.save();
     }
