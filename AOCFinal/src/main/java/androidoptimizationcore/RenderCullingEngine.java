@@ -159,7 +159,7 @@ public final class RenderCullingEngine {
             double renderCamY,
             double renderCamZ) {
         try {
-            if (entity == null || AOCConfig.entityExtraRange <= 0) return false;
+            if (entity == null) return false;
 
             AxisAlignedBB box = entity.getEntityBoundingBox();
             if (box == null || box.hasNaN()) return false;
