@@ -9,6 +9,7 @@ package androidoptimizationcore.api;
  */
 public enum AOCOptimizationCategory {
     ENTITY,
+    ITEM,
     TILE_ENTITY,
     PARTICLE,
     BLOCK_VISUAL,
