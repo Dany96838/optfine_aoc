@@ -263,22 +263,25 @@ public final class RenderCullingEngine {
              * camera. The half-diagonal margin makes this fail-open for large
              * particle bounds that cross the camera plane.
              */
-            Entity cameraEntity = mc.getRenderViewEntity();
-            if (cameraEntity != null) {
-                Vec3d look = cameraEntity.getLook(mc.getRenderPartialTicks());
-                double halfDiagonal = 0.5D * Math.sqrt(
-                        (box.maxX - box.minX) * (box.maxX - box.minX)
-                                + (box.maxY - box.minY) * (box.maxY - box.minY)
-                                + (box.maxZ - box.minZ) * (box.maxZ - box.minZ));
+            double yawRad = Math.toRadians(camYaw);
+            double pitchRad = Math.toRadians(camPitch);
+            double cosPitch = Math.cos(pitchRad);
+            double forwardX = -Math.sin(yawRad) * cosPitch;
+            double forwardY = -Math.sin(pitchRad);
+            double forwardZ = Math.cos(yawRad) * cosPitch;
 
-                double forwardProjection =
-                        dx * look.xCoord
-                                + dy * look.yCoord
-                                + dz * look.zCoord;
+            double halfDiagonal = 0.5D * Math.sqrt(
+                    (box.maxX - box.minX) * (box.maxX - box.minX)
+                            + (box.maxY - box.minY) * (box.maxY - box.minY)
+                            + (box.maxZ - box.minZ) * (box.maxZ - box.minZ));
 
-                if (forwardProjection + halfDiagonal < -0.05D) {
-                    return true;
-                }
+            double forwardProjection =
+                    dx * forwardX
+                            + dy * forwardY
+                            + dz * forwardZ;
+
+            if (forwardProjection + halfDiagonal < -0.05D) {
+                return true;
             }
 
             double distance = AOCConfig.particleDistance;
