@@ -39,3 +39,4 @@ key.aoc.impact.budget_medium=Impacto atual: médio (%d). Equilibra rapidez da oc
 key.aoc.impact.budget_high=Impacto atual: alto (%d). Mais verificações atualizam a oclusão mais rapidamente, com maior custo de CPU.
 key.categories.aoc=Android Optimization Core
 key.aoc.subtitle=Otimização independente de renderização no cliente para Forge 1.12.2
+key.aoc.tooltip.done=Fecha o menu do Android Optimization Core e salva as configurações.
