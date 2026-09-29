@@ -11,11 +11,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AOC settings screen using the same compact two-column layout as the
- * vanilla video settings screen.
+ * AOC settings screen opened by the configurable AOC key binding.
  *
- * Numeric options use Forge's 1.12.2 GuiSlider, so they are real draggable
- * selectors rather than click-to-cycle buttons.
+ * Numeric settings use Forge 1.12.2 GuiSlider so ranges are genuinely
+ * draggable. The screen is independent from the Video Settings menu.
  */
 public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
     private final GuiScreen parent;
@@ -34,49 +33,68 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
         final int gap = 8;
         final int left = width / 2 - bw - gap / 2;
         final int right = width / 2 + gap / 2;
-        final int y = 48;
+        final int y = 46;
         final int step = 24;
 
+        // Row 1: entities.
         buttonList.add(new GuiButton(1, left, y, bw, bh,
                 toggle("key.aoc.entity", AOCConfig.entityCulling)));
-        buttonList.add(new GuiButton(2, right, y, bw, bh,
-                toggle("key.aoc.tile", AOCConfig.tileEntityCulling)));
-
-        buttonList.add(new GuiButton(3, left, y + step, bw, bh,
-                toggle("key.aoc.occlusion", AOCConfig.occlusionCulling)));
-
-        buttonList.add(new GuiSlider(4, right, y + step, bw, bh,
+        buttonList.add(new GuiSlider(4, right, y, bw, bh,
                 I18n.format("key.aoc.entity_distance") + ": ",
                 " " + I18n.format("key.aoc.unit.blocks"),
-                8.0D, 512.0D, AOCConfig.entityDistance,
+                8.0D, 640.0D, AOCConfig.entityDistance,
                 false, true, this));
 
-        buttonList.add(new GuiSlider(5, left, y + step * 2, bw, bh,
+        // Row 2: TileEntities.
+        buttonList.add(new GuiButton(2, left, y + step, bw, bh,
+                toggle("key.aoc.tile", AOCConfig.tileEntityCulling)));
+        buttonList.add(new GuiSlider(5, right, y + step, bw, bh,
                 I18n.format("key.aoc.tile_distance") + ": ",
                 " " + I18n.format("key.aoc.unit.blocks"),
-                8.0D, 512.0D, AOCConfig.tileEntityDistance,
+                8.0D, 640.0D, AOCConfig.tileEntityDistance,
                 false, true, this));
 
+        // Row 3: particles.
+        buttonList.add(new GuiButton(3, left, y + step * 2, bw, bh,
+                toggle("key.aoc.particle", AOCConfig.particleCulling)));
         buttonList.add(new GuiSlider(6, right, y + step * 2, bw, bh,
+                I18n.format("key.aoc.particle_distance") + ": ",
+                " " + I18n.format("key.aoc.unit.blocks"),
+                8.0D, 160.0D, AOCConfig.particleDistance,
+                false, true, this));
+
+        // Row 4: visual effects.
+        buttonList.add(new GuiButton(7, left, y + step * 3, bw, bh,
+                toggle("key.aoc.effect", AOCConfig.effectCulling)));
+        buttonList.add(new GuiSlider(8, right, y + step * 3, bw, bh,
+                I18n.format("key.aoc.effect_distance") + ": ",
+                " " + I18n.format("key.aoc.unit.blocks"),
+                8.0D, 160.0D, AOCConfig.effectDistance,
+                false, true, this));
+
+        // Row 5: opaque-block occlusion and its work budget.
+        buttonList.add(new GuiButton(9, left, y + step * 4, bw, bh,
+                toggle("key.aoc.occlusion", AOCConfig.occlusionCulling)));
+        buttonList.add(new GuiSlider(10, right, y + step * 4, bw, bh,
                 I18n.format("key.aoc.occlusion_budget") + ": ",
                 " " + I18n.format("key.aoc.unit.checks"),
                 0.0D, 64.0D, AOCConfig.occlusionBudget,
                 false, true, this));
 
-        buttonList.add(new GuiButton(7, left, y + step * 3, bw, bh,
+        buttonList.add(new GuiButton(11, left, y + step * 5, bw, bh,
                 I18n.format("key.aoc.reset")));
-
-        buttonList.add(new GuiButton(8, right, y + step * 3, bw, bh,
+        buttonList.add(new GuiButton(12, right, y + step * 5, bw, bh,
                 I18n.format("key.aoc.done")));
     }
 
     private String toggle(String key, boolean value) {
-        return I18n.format(key) + ": " + I18n.format(value ? "key.aoc.on" : "key.aoc.off");
+        return I18n.format(key) + ": "
+                + I18n.format(value ? "key.aoc.on" : "key.aoc.off");
     }
 
     @Override
-    protected void actionPerformed(GuiButton b) throws IOException {
-        switch (b.id) {
+    protected void actionPerformed(GuiButton button) throws IOException {
+        switch (button.id) {
             case 1:
                 AOCConfig.entityCulling = !AOCConfig.entityCulling;
                 break;
@@ -84,17 +102,22 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
                 AOCConfig.tileEntityCulling = !AOCConfig.tileEntityCulling;
                 break;
             case 3:
-                AOCConfig.occlusionCulling = !AOCConfig.occlusionCulling;
+                AOCConfig.particleCulling = !AOCConfig.particleCulling;
                 break;
             case 7:
+                AOCConfig.effectCulling = !AOCConfig.effectCulling;
+                break;
+            case 9:
+                AOCConfig.occlusionCulling = !AOCConfig.occlusionCulling;
+                break;
+            case 11:
                 AOCConfig.resetDefaults();
                 break;
-            case 8:
+            case 12:
                 AOCConfig.save();
                 mc.displayGuiScreen(parent);
                 return;
             default:
-                // GuiSlider changes are delivered through onChangeSliderValue().
                 return;
         }
 
@@ -107,19 +130,32 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
         try {
             switch (slider.id) {
                 case 4:
-                    AOCConfig.entityDistance = clampInt(slider.getValueInt(), 8, 512);
+                    AOCConfig.entityDistance =
+                            clampInt(slider.getValueInt(), 8, 640);
                     break;
                 case 5:
-                    AOCConfig.tileEntityDistance = clampInt(slider.getValueInt(), 8, 512);
+                    AOCConfig.tileEntityDistance =
+                            clampInt(slider.getValueInt(), 8, 640);
                     break;
                 case 6:
-                    AOCConfig.occlusionBudget = clampInt(slider.getValueInt(), 0, 64);
+                    AOCConfig.particleDistance =
+                            clampInt(slider.getValueInt(), 8, 160);
+                    break;
+                case 8:
+                    AOCConfig.effectDistance =
+                            clampInt(slider.getValueInt(), 8, 160);
+                    break;
+                case 10:
+                    AOCConfig.occlusionBudget =
+                            clampInt(slider.getValueInt(), 0, 64);
                     break;
                 default:
                     return;
             }
+
+            AOCConfig.applyToRuntime();
         } catch (Throwable ignored) {
-            // GUI interaction must never crash the client.
+            // A GUI interaction must never crash the client.
         }
     }
 
@@ -132,17 +168,17 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
         drawDefaultBackground();
 
         drawCenteredString(fontRenderer, I18n.format("key.aoc.title"),
-                width / 2, 20, 0xFFFFFF);
+                width / 2, 18, 0xFFFFFF);
         drawCenteredString(fontRenderer, I18n.format("key.aoc.subtitle"),
-                width / 2, 34, 0xA0A0A0);
+                width / 2, 32, 0xA0A0A0);
 
         super.drawScreen(mouseX, mouseY, partialTicks);
 
         GuiButton hovered = null;
-        for (Object o : buttonList) {
-            GuiButton b = (GuiButton) o;
-            if (b.isMouseOver()) {
-                hovered = b;
+        for (Object object : buttonList) {
+            GuiButton button = (GuiButton) object;
+            if (button.isMouseOver()) {
+                hovered = button;
                 break;
             }
         }
@@ -153,19 +189,23 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
         switch (hovered.id) {
             case 1: key = "key.aoc.tooltip.entity"; break;
             case 2: key = "key.aoc.tooltip.tile"; break;
-            case 3: key = "key.aoc.tooltip.occlusion"; break;
+            case 3: key = "key.aoc.tooltip.particle"; break;
             case 4:
-            case 5: key = "key.aoc.tooltip.distance"; break;
-            case 6: key = "key.aoc.tooltip.budget"; break;
-            case 7: key = "key.aoc.tooltip.reset"; break;
-            case 8: return;
+            case 5:
+            case 6:
+            case 8: key = "key.aoc.tooltip.distance"; break;
+            case 7: key = "key.aoc.tooltip.effect"; break;
+            case 9: key = "key.aoc.tooltip.occlusion"; break;
+            case 10: key = "key.aoc.tooltip.budget"; break;
+            case 11: key = "key.aoc.tooltip.reset"; break;
+            case 12: return;
             default: return;
         }
 
         tooltip.clear();
         tooltip.add(I18n.format(key));
-        GuiUtils.drawHoveringText(tooltip, mouseX, mouseY,
-                width, height, 280, fontRenderer);
+        GuiUtils.drawHoveringText(
+                tooltip, mouseX, mouseY, width, height, 300, fontRenderer);
     }
 
     @Override
