@@ -145,6 +145,48 @@ public final class RenderCullingEngine {
      * occlusion.
      */
     /**
+     * Extends the vanilla entity render-distance decision without changing
+     * entity state. This is consulted only when vanilla returned false.
+     *
+     * Vanilla 1.12.2 uses the entity bounding-box average edge length,
+     * multiplied by 64 and renderDistanceWeight (1.0), as its base distance.
+     * AOC adds only the separately configured 0..128 block extension.
+     */
+    public static boolean shouldForceExtendedEntityRender(
+            Entity entity,
+            ICamera camera,
+            double renderCamX,
+            double renderCamY,
+            double renderCamZ) {
+        try {
+            if (entity == null || AOCConfig.entityExtraRange <= 0) return false;
+
+            AxisAlignedBB box = entity.getEntityBoundingBox();
+            if (box == null || box.hasNaN()) return false;
+
+            if (camera != null && !entity.ignoreFrustumCheck
+                    && !camera.isBoundingBoxInFrustum(box)) {
+                return false;
+            }
+
+            double edge = box.getAverageEdgeLength();
+            if (Double.isNaN(edge)) edge = 1.0D;
+
+            double vanillaRange = edge * 64.0D;
+            double allowed = vanillaRange + AOCConfig.entityExtraRange;
+
+            double dx = entity.posX - renderCamX;
+            double dy = entity.posY - renderCamY;
+            double dz = entity.posZ - renderCamZ;
+            double distanceSq = dx * dx + dy * dy + dz * dz;
+
+            return distanceSq < allowed * allowed;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
      * Dedicated visual-effect culling for effect-like entities. This remains
      * separate from the generic entity switch so users can optimize effects
      * without changing the entity-culling policy.
