@@ -3,8 +3,6 @@ package androidoptimizationcore;
 import androidoptimizationcore.api.AOCOptimizationRuntime;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.culling.ClippingHelperImpl;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
@@ -57,9 +55,6 @@ public final class RenderCullingEngine {
     private static final Set<Object> QUEUED =
             new HashSet<Object>();
 
-    private static Frustum tileFrustum =
-            new Frustum(ClippingHelperImpl.getInstance());
-
     private static double camX;
     private static double camY;
     private static double camZ;
@@ -89,9 +84,6 @@ public final class RenderCullingEngine {
         camYaw = camera.prevRotationYaw + (camera.rotationYaw - camera.prevRotationYaw) * pt;
         camPitch = camera.prevRotationPitch + (camera.rotationPitch - camera.prevRotationPitch) * pt;
 
-        Frustum f = new Frustum(ClippingHelperImpl.getInstance());
-        f.setPosition(camX, camY, camZ);
-        tileFrustum = f;
     }
 
     /**
