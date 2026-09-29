@@ -90,30 +90,24 @@ public final class AOCTransformer implements IClassTransformer {
 
     private byte[] patchParticleManager(byte[] bytes) {
         ClassNode cn = read(bytes);
-        MethodNode target = null;
+        int patched = 0;
 
         for (MethodNode m : cn.methods) {
-            if (isParticleAddEffectShape(m.desc)) {
-                target = m;
-                break;
-            }
+            if (!isParticleRenderMethodShape(m.desc)) continue;
+            patched += patchParticleRenderCalls(m);
         }
 
-        if (target == null) {
+        if (patched == 0) {
             if (!loggedParticleMiss) {
                 loggedParticleMiss = true;
-                System.out.println("[AOC] WARNING: ParticleManager.addEffect target was not found.");
+                System.out.println("[AOC] WARNING: ParticleManager render targets were not found.");
             }
             return bytes;
         }
 
-        if (!containsHook(target, "shouldCullParticle")) {
-            insertParticleHook(target);
-        }
-
         if (!loggedParticleHook) {
             loggedParticleHook = true;
-            System.out.println("[AOC] PATCHED ParticleManager.addEffect (descriptor/shape match)");
+            System.out.println("[AOC] PATCHED ParticleManager render calls: " + patched);
         }
 
         return write(cn);
@@ -165,7 +159,7 @@ public final class AOCTransformer implements IClassTransformer {
                 && args[4].getSort() == Type.DOUBLE;
     }
 
-    private static boolean isParticleAddEffectShape(String desc) {
+    private static boolean isParticleRenderMethodShape(String desc) {
         Type[] args;
         try {
             args = Type.getArgumentTypes(desc);
@@ -173,9 +167,97 @@ public final class AOCTransformer implements IClassTransformer {
             return false;
         }
 
-        return Type.getReturnType(desc).getSort() == Type.VOID
-                && args.length == 1
-                && args[0].getSort() == Type.OBJECT;
+        if (Type.getReturnType(desc).getSort() != Type.VOID) return false;
+        if (args.length != 2) return false;
+
+        return args[0].getSort() == Type.OBJECT
+                && args[1].getSort() == Type.FLOAT;
+    }
+
+    private static int patchParticleRenderCalls(MethodNode method) {
+        int patched = 0;
+        int nextLocal = method.maxLocals;
+
+        for (AbstractInsnNode insn = method.instructions.getFirst();
+             insn != null; ) {
+            AbstractInsnNode next = insn.getNext();
+
+            if (insn instanceof MethodInsnNode
+                    && isParticleRenderCall((MethodInsnNode) insn)) {
+                MethodInsnNode call = (MethodInsnNode) insn;
+                Type[] args = Type.getArgumentTypes(call.desc);
+
+                int receiverLocal = nextLocal++;
+                int[] argLocals = new int[args.length];
+
+                for (int i = args.length - 1; i >= 0; i--) {
+                    argLocals[i] = nextLocal;
+                    nextLocal += args[i].getSize();
+                }
+
+                LabelNode render = new LabelNode();
+                InsnList patch = new InsnList();
+
+                for (int i = args.length - 1; i >= 0; i--) {
+                    patch.add(new VarInsnNode(
+                            args[i].getOpcode(Opcodes.ISTORE),
+                            argLocals[i]));
+                }
+                patch.add(new VarInsnNode(Opcodes.ASTORE, receiverLocal));
+
+                patch.add(new VarInsnNode(Opcodes.ALOAD, receiverLocal));
+                patch.add(new MethodInsnNode(
+                        Opcodes.INVOKESTATIC,
+                        CULL_ENGINE,
+                        "shouldCullParticle",
+                        "(Lnet/minecraft/client/particle/Particle;)Z",
+                        false
+                ));
+                patch.add(new JumpInsnNode(Opcodes.IFEQ, render));
+
+                patch.add(render);
+
+                patch.add(new VarInsnNode(Opcodes.ALOAD, receiverLocal));
+                for (int i = 0; i < args.length; i++) {
+                    patch.add(new VarInsnNode(
+                            args[i].getOpcode(Opcodes.ILOAD),
+                            argLocals[i]));
+                }
+
+                method.instructions.insertBefore(insn, patch);
+
+                InsnList replacement = new InsnList();
+                replacement.add(insn);
+                method.instructions.insertBefore(insn, new InsnList());
+                patched++;
+            }
+
+            insn = next;
+        }
+
+        method.maxLocals = Math.max(method.maxLocals, nextLocal);
+        return patched;
+    }
+
+    private static boolean isParticleRenderCall(MethodInsnNode call) {
+        Type[] args;
+        try {
+            args = Type.getArgumentTypes(call.desc);
+        } catch (Throwable ignored) {
+            return false;
+        }
+
+        if (Type.getReturnType(call.desc).getSort() != Type.VOID) return false;
+        if (args.length != 8) return false;
+        if (args[0].getSort() != Type.OBJECT || args[1].getSort() != Type.OBJECT) {
+            return false;
+        }
+
+        for (int i = 2; i < args.length; i++) {
+            if (args[i].getSort() != Type.FLOAT) return false;
+        }
+
+        return true;
     }
 
     private static boolean isTileRenderShape(String desc) {
@@ -303,25 +385,6 @@ public final class AOCTransformer implements IClassTransformer {
         hook.add(cull);
         hook.add(new InsnNode(Opcodes.ICONST_0));
         hook.add(new InsnNode(Opcodes.IRETURN));
-        hook.add(pass);
-
-        m.instructions.insert(hook);
-    }
-
-    private static void insertParticleHook(MethodNode m) {
-        InsnList hook = new InsnList();
-        LabelNode pass = new LabelNode();
-
-        hook.add(new VarInsnNode(Opcodes.ALOAD, 1));
-        hook.add(new MethodInsnNode(
-                Opcodes.INVOKESTATIC,
-                CULL_ENGINE,
-                "shouldCullParticle",
-                "(Lnet/minecraft/client/particle/Particle;)Z",
-                false
-        ));
-        hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
-        hook.add(new InsnNode(Opcodes.RETURN));
         hook.add(pass);
 
         m.instructions.insert(hook);
