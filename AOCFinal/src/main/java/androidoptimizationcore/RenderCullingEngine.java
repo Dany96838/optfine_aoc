@@ -619,7 +619,7 @@ public final class RenderCullingEngine {
             }
 
             Vec3d direction = new Vec3d(endX - sx, endY - sy, endZ - sz);
-            double length = direction.lengthVector();
+            double length = Math.sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
             if (length <= 1.0E-4D) return RayResult.VISIBLE;
 
             /*
@@ -629,9 +629,9 @@ public final class RenderCullingEngine {
              */
             double step = Math.min(0.02D, length * 0.25D);
             Vec3d next = hit.hitVec.add(direction.normalize().scale(step));
-            sx = next.xCoord;
-            sy = next.yCoord;
-            sz = next.zCoord;
+            sx = next.x;
+            sy = next.y;
+            sz = next.z;
         }
 
         // Too many transparent/partial intersections = uncertainty.
