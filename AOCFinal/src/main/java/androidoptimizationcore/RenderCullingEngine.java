@@ -10,6 +10,7 @@ import net.minecraft.client.particle.Particle;
 import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
 import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.EntityAreaEffectCloud;
 import net.minecraft.entity.effect.EntityLightningBolt;
 import net.minecraft.entity.item.EntityFireworkRocket;
@@ -41,11 +42,15 @@ public final class RenderCullingEngine {
             new HashMap<Entity, CacheEntry>();
     private static final Map<BlockPos, CacheEntry> TILE_OCCLUSION =
             new HashMap<BlockPos, CacheEntry>();
+    private static final Map<Particle, CacheEntry> PARTICLE_OCCLUSION =
+            new HashMap<Particle, CacheEntry>();
 
     private static final Map<Entity, OcclusionTask<Entity>> ENTITY_PENDING =
             new HashMap<Entity, OcclusionTask<Entity>>();
     private static final Map<BlockPos, OcclusionTask<BlockPos>> TILE_PENDING =
             new HashMap<BlockPos, OcclusionTask<BlockPos>>();
+    private static final Map<Particle, OcclusionTask<Particle>> PARTICLE_PENDING =
+            new HashMap<Particle, OcclusionTask<Particle>>();
 
     private static final ArrayDeque<OcclusionTask<?>> WORK_QUEUE =
             new ArrayDeque<OcclusionTask<?>>();
@@ -58,6 +63,8 @@ public final class RenderCullingEngine {
     private static double camX;
     private static double camY;
     private static double camZ;
+    private static float camYaw;
+    private static float camPitch;
     private static World currentWorld;
     private static long tick;
 
@@ -79,6 +86,8 @@ public final class RenderCullingEngine {
         camY = camera.prevPosY + (camera.posY - camera.prevPosY) * pt
                 + camera.getEyeHeight();
         camZ = camera.prevPosZ + (camera.posZ - camera.prevPosZ) * pt;
+        camYaw = camera.prevRotationYaw + (camera.rotationYaw - camera.prevRotationYaw) * pt;
+        camPitch = camera.prevRotationPitch + (camera.rotationPitch - camera.prevRotationPitch) * pt;
 
         Frustum f = new Frustum(ClippingHelperImpl.getInstance());
         f.setPosition(camX, camY, camZ);
@@ -100,7 +109,14 @@ public final class RenderCullingEngine {
             double renderCamZ) {
 
         try {
-            if (!AOCConfig.entityCulling || entity == null) {
+            if (entity == null) {
+                return false;
+            }
+
+            boolean droppedItem = entity instanceof EntityItem;
+            if (droppedItem) {
+                if (!AOCConfig.itemCulling) return false;
+            } else if (!AOCConfig.entityCulling) {
                 return false;
             }
 
@@ -116,7 +132,8 @@ public final class RenderCullingEngine {
                 return false;
             }
 
-            double distance = AOCConfig.entityDistance;
+            double distance = droppedItem
+                    ? AOCConfig.itemDistance : AOCConfig.entityDistance;
             double dx = entity.posX - renderCamX;
             double dy = entity.posY - renderCamY;
             double dz = entity.posZ - renderCamZ;
@@ -162,33 +179,40 @@ public final class RenderCullingEngine {
             double renderCamY,
             double renderCamZ) {
         try {
-            if (!AOCConfig.entityCulling || entity == null) return false;
+            if (entity == null) return false;
+
+            boolean droppedItem = entity instanceof EntityItem;
+            if (droppedItem) {
+                if (!AOCConfig.itemCulling) return false;
+            } else if (!AOCConfig.entityCulling) {
+                return false;
+            }
 
             AxisAlignedBB box = entity.getEntityBoundingBox();
             if (box == null || box.hasNaN()) return false;
 
             if (camera != null && !entity.ignoreFrustumCheck
-                    && !camera.isBoundingBoxInFrustum(box)) {
+                    && !camera.isBoundingBoxInFrustum(box.grow(0.5D))) {
                 return false;
             }
 
-            double edge = box.getAverageEdgeLength();
-            if (Double.isNaN(edge)) edge = 1.0D;
-
-            double vanillaRange = edge * 64.0D;
-            double allowed = Math.max(
-                    vanillaRange, (double) AOCConfig.entityDistance)
-                    + (double) AOCConfig.entityExtraRange;
+            double distanceLimit = droppedItem
+                    ? AOCConfig.itemDistance : AOCConfig.entityDistance;
 
             double dx = entity.posX - renderCamX;
             double dy = entity.posY - renderCamY;
             double dz = entity.posZ - renderCamZ;
             double distanceSq = dx * dx + dy * dy + dz * dz;
-            double aocLimit = (double) AOCConfig.entityDistance
-                    + (double) AOCConfig.entityExtraRange;
 
-            return distanceSq < allowed * allowed
-                    && distanceSq < aocLimit * aocLimit;
+            if (distanceSq >= distanceLimit * distanceLimit) {
+                return false;
+            }
+
+            // Only extend the vanilla decision when its own distance test
+            // would be the limiting factor. This keeps custom renderer
+            // behavior and frustum decisions intact as much as possible.
+            return !entity.isInRangeToRender3d(
+                    renderCamX, renderCamY, renderCamZ);
         } catch (Throwable ignored) {
             return false;
         }
@@ -249,9 +273,6 @@ public final class RenderCullingEngine {
             AxisAlignedBB box = particle.getBoundingBox();
             if (box == null || box.hasNaN()) return false;
 
-            Entity camera = mc.getRenderViewEntity();
-            if (camera == null) return false;
-
             double px = (box.minX + box.maxX) * 0.5D;
             double py = (box.minY + box.maxY) * 0.5D;
             double pz = (box.minZ + box.maxZ) * 0.5D;
@@ -265,11 +286,23 @@ public final class RenderCullingEngine {
                 return true;
             }
 
-            return !tileFrustum.isBoundingBoxInFrustum(box);
+            if (!AOCConfig.occlusionCulling) return false;
+
+            return requestOcclusion(
+                    mc.world,
+                    PARTICLE_OCCLUSION,
+                    PARTICLE_PENDING,
+                    particle,
+                    box,
+                    null,
+                    camX,
+                    camY,
+                    camZ);
         } catch (Throwable ignored) {
             return false;
         }
     }
+
 
     public static boolean shouldCullTileEntity(TileEntity tileEntity) {
         try {
@@ -297,14 +330,6 @@ public final class RenderCullingEngine {
                 return false;
             }
 
-            if (!tileFrustum.isBoundingBoxInFrustum(box)) {
-                if (!loggedTileCull) {
-                    loggedTileCull = true;
-                    System.out.println("[AOC] TileEntity frustum culling is active.");
-                }
-                return true;
-            }
-
             double dx = pos.getX() + 0.5D - camX;
             double dy = pos.getY() + 0.5D - camY;
             double dz = pos.getZ() + 0.5D - camZ;
@@ -316,7 +341,7 @@ public final class RenderCullingEngine {
 
             if (!AOCConfig.occlusionCulling) return false;
 
-            boolean result = requestOcclusion(
+            return requestOcclusion(
                     mc.world,
                     TILE_OCCLUSION,
                     TILE_PENDING,
@@ -326,17 +351,11 @@ public final class RenderCullingEngine {
                     camX,
                     camY,
                     camZ);
-
-            if (result && !loggedTileCull) {
-                loggedTileCull = true;
-                System.out.println("[AOC] TileEntity block-occlusion culling is active.");
-            }
-
-            return result;
         } catch (Throwable ignored) {
             return false;
         }
     }
+
 
     private static <K> boolean requestOcclusion(
             World world,
@@ -487,6 +506,8 @@ public final class RenderCullingEngine {
             ENTITY_PENDING.remove((Entity) task.key);
         } else if (task.key instanceof BlockPos) {
             TILE_PENDING.remove((BlockPos) task.key);
+        } else if (task.key instanceof Particle) {
+            PARTICLE_PENDING.remove((Particle) task.key);
         }
     }
 
@@ -494,8 +515,10 @@ public final class RenderCullingEngine {
         currentWorld = world;
         ENTITY_OCCLUSION.clear();
         TILE_OCCLUSION.clear();
+        PARTICLE_OCCLUSION.clear();
         ENTITY_PENDING.clear();
         TILE_PENDING.clear();
+        PARTICLE_PENDING.clear();
         WORK_QUEUE.clear();
         QUEUED.clear();
     }
@@ -508,6 +531,14 @@ public final class RenderCullingEngine {
                 if (entity == null || entity.isDead || entity.world != currentWorld) {
                     it.remove();
                 }
+            }
+        }
+
+        if (PARTICLE_OCCLUSION.size() > 8192) {
+            Iterator<Particle> it = PARTICLE_OCCLUSION.keySet().iterator();
+            while (it.hasNext() && PARTICLE_OCCLUSION.size() > 4096) {
+                Particle particle = it.next();
+                if (particle == null || !particle.isAlive()) it.remove();
             }
         }
 
@@ -527,6 +558,7 @@ public final class RenderCullingEngine {
             QUEUED.clear();
             ENTITY_PENDING.clear();
             TILE_PENDING.clear();
+            PARTICLE_PENDING.clear();
         }
     }
 
@@ -570,6 +602,13 @@ public final class RenderCullingEngine {
         return RayResult.BLOCKED;
     }
 
+    private static float angleChanged(float a, float b) {
+        float delta = (a - b) % 360.0F;
+        if (delta > 180.0F) delta -= 360.0F;
+        if (delta < -180.0F) delta += 360.0F;
+        return Math.abs(delta);
+    }
+
     private enum RayResult {
         BLOCKED,
         VISIBLE
@@ -584,6 +623,8 @@ public final class RenderCullingEngine {
         final double startY;
         final double startZ;
         final long createdTick;
+        final float yaw;
+        final float pitch;
         int sampleIndex;
 
         OcclusionTask(
@@ -603,10 +644,12 @@ public final class RenderCullingEngine {
             this.startY = startY;
             this.startZ = startZ;
             this.createdTick = createdTick;
+            this.yaw = camYaw;
+            this.pitch = camPitch;
         }
 
         int sampleCount() {
-            return 5;
+            return key instanceof Particle ? 1 : 5;
         }
 
         double[] sample(int index) {
@@ -646,8 +689,11 @@ public final class RenderCullingEngine {
             double dy = y - startY;
             double dz = z - startZ;
 
-            return dx * dx + dy * dy + dz * dz <= 9.0D
-                    && Math.abs(box.minX - currentBox.minX) < 0.05D
+            if (dx * dx + dy * dy + dz * dz > 9.0D) return false;
+            if (angleChanged(yaw, camYaw) > 6.0F
+                    || Math.abs(pitch - camPitch) > 6.0F) return false;
+
+            return Math.abs(box.minX - currentBox.minX) < 0.05D
                     && Math.abs(box.minY - currentBox.minY) < 0.05D
                     && Math.abs(box.minZ - currentBox.minZ) < 0.05D
                     && Math.abs(box.maxX - currentBox.maxX) < 0.05D
@@ -672,6 +718,8 @@ public final class RenderCullingEngine {
         final double maxX;
         final double maxY;
         final double maxZ;
+        final float yaw;
+        final float pitch;
 
         CacheEntry(
                 boolean occluded,
@@ -691,6 +739,8 @@ public final class RenderCullingEngine {
             this.maxX = box.maxX;
             this.maxY = box.maxY;
             this.maxZ = box.maxZ;
+            this.yaw = camYaw;
+            this.pitch = camPitch;
         }
 
         boolean isUsable(
@@ -706,6 +756,10 @@ public final class RenderCullingEngine {
             double dz = cameraZ - z;
 
             if (dx * dx + dy * dy + dz * dz > 2.25D) {
+                return false;
+            }
+            if (angleChanged(yaw, camYaw) > 6.0F
+                    || Math.abs(pitch - camPitch) > 6.0F) {
                 return false;
             }
 
