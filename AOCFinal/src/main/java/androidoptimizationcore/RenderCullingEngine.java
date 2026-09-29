@@ -1,5 +1,6 @@
 package androidoptimizationcore;
 
+import androidoptimizationcore.api.AOCOptimizationRuntime;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.ClippingHelperImpl;
@@ -384,6 +385,7 @@ public final class RenderCullingEngine {
         tick++;
         updateCamera();
 
+        AOCOptimizationRuntime.get().resetBudget();
         processVisibilityWork();
 
         if (tick % 40L == 0L) {
@@ -397,9 +399,10 @@ public final class RenderCullingEngine {
      * visible objects cheap while retaining conservative multi-point culling.
      */
     private static void processVisibilityWork() {
-        int budget = Math.max(0, AOCConfig.occlusionBudget);
+        AOCOptimizationRuntime runtime = AOCOptimizationRuntime.get();
 
-        while (budget > 0 && !WORK_QUEUE.isEmpty()) {
+        while (runtime.getRemainingVisualChecks() > 0
+                && !WORK_QUEUE.isEmpty()) {
             OcclusionTask<?> raw = WORK_QUEUE.poll();
             if (raw == null) break;
 
@@ -411,7 +414,6 @@ public final class RenderCullingEngine {
             }
 
             RayResult ray = testSample(raw);
-            budget--;
 
             if (ray == RayResult.BLOCKED) {
                 raw.sampleIndex++;
@@ -433,6 +435,9 @@ public final class RenderCullingEngine {
 
     private static RayResult testSample(OcclusionTask<?> task) {
         if (task.sampleIndex >= task.sampleCount()) return RayResult.VISIBLE;
+
+        AOCOptimizationRuntime runtime = AOCOptimizationRuntime.get();
+        if (!runtime.tryConsumeVisualCheck()) return RayResult.VISIBLE;
 
         double[] sample = task.sample(task.sampleIndex);
         return rayBlockedByOpaqueBlock(
