@@ -1,4 +1,4 @@
-Android Optimization Core 1.3.0
+Android Optimization Core 1.4.0
 Target: Minecraft 1.12.2 / Forge 14.23.5.2864 / Java 8
 OptiFine: optional compatibility target; not a dependency
 
@@ -9,12 +9,14 @@ Build:
   ./gradlew clean build --no-daemon
 
 Produced JAR:
-  build/libs/AndroidOptimizationCore-1.3.0.jar
+  build/libs/AndroidOptimizationCore-1.4.0.jar
 
 Optimization design:
 - Independent Forge client-side coremod.
 - Entity hook uses the RenderManager.shouldRender method shape so it remains usable with obfuscated 1.12.2 bytecode.
 - TileEntity hook identifies render overloads by descriptor shape rather than deobfuscated class names.
+- Dropped items use a dedicated 8-640 block client-side range while XP Orbs and potion entities remain under the entity range.
+- Particle distance checks avoid camera-frustum rejection at particle creation time; solid-block occlusion is evaluated conservatively through the shared budget.
 - World access for occlusion remains on the Minecraft client thread.
 - Center visibility is tested before corner samples.
 - The configured budget counts actual World.rayTraceBlocks calls.
