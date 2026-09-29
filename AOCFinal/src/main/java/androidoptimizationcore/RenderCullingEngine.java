@@ -97,9 +97,7 @@ public final class RenderCullingEngine {
             double renderCamZ) {
 
         try {
-            if (!AOCConfig.entityCulling
-                    || !AOCConfig.occlusionCulling
-                    || entity == null) {
+            if (!AOCConfig.entityCulling || entity == null) {
                 return false;
             }
 
@@ -121,8 +119,10 @@ public final class RenderCullingEngine {
             double dz = entity.posZ - renderCamZ;
 
             if (dx * dx + dy * dy + dz * dz > distance * distance) {
-                return false;
+                return true;
             }
+
+            if (!AOCConfig.occlusionCulling) return false;
 
             return requestOcclusion(
                     mc.world,
@@ -173,7 +173,9 @@ public final class RenderCullingEngine {
             if (Double.isNaN(edge)) edge = 1.0D;
 
             double vanillaRange = edge * 64.0D;
-            double allowed = vanillaRange + AOCConfig.entityExtraRange;
+            double allowed = Math.max(
+                    vanillaRange, (double) AOCConfig.entityDistance)
+                    + (double) AOCConfig.entityExtraRange;
 
             double dx = entity.posX - renderCamX;
             double dy = entity.posY - renderCamY;
@@ -294,16 +296,16 @@ public final class RenderCullingEngine {
                 return true;
             }
 
-            if (!AOCConfig.occlusionCulling) return false;
-
             double dx = pos.getX() + 0.5D - camX;
             double dy = pos.getY() + 0.5D - camY;
             double dz = pos.getZ() + 0.5D - camZ;
             double distance = AOCConfig.tileEntityDistance;
 
             if (dx * dx + dy * dy + dz * dz > distance * distance) {
-                return false;
+                return true;
             }
+
+            if (!AOCConfig.occlusionCulling) return false;
 
             boolean result = requestOcclusion(
                     mc.world,
