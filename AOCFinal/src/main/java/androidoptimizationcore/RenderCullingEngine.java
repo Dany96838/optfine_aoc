@@ -256,9 +256,31 @@ public final class RenderCullingEngine {
             double py = (box.minY + box.maxY) * 0.5D;
             double pz = (box.minZ + box.maxZ) * 0.5D;
 
-            double dx = px - camX;
-            double dy = py - camY;
-            double dz = pz - camZ;
+            /*
+             * ParticleManager does not expose the active ICamera to this hook.
+             * Use the actual render-view entity look vector for the one frustum
+             * case that matters here: a particle that is completely behind the
+             * camera. The half-diagonal margin makes this fail-open for large
+             * particle bounds that cross the camera plane.
+             */
+            Entity cameraEntity = mc.getRenderViewEntity();
+            if (cameraEntity != null) {
+                Vec3d look = cameraEntity.getLook(mc.getRenderPartialTicks());
+                double halfDiagonal = 0.5D * Math.sqrt(
+                        (box.maxX - box.minX) * (box.maxX - box.minX)
+                                + (box.maxY - box.minY) * (box.maxY - box.minY)
+                                + (box.maxZ - box.minZ) * (box.maxZ - box.minZ));
+
+                double forwardProjection =
+                        dx * look.xCoord
+                                + dy * look.yCoord
+                                + dz * look.zCoord;
+
+                if (forwardProjection + halfDiagonal < -0.05D) {
+                    return true;
+                }
+            }
+
             double distance = AOCConfig.particleDistance;
 
             if (dx * dx + dy * dy + dz * dz > distance * distance) {
