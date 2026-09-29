@@ -17,7 +17,7 @@ public final class AOCOptimizationRuntime {
     private final Map<AOCOptimizationCategory, Integer> visibilityRanges =
             new EnumMap<AOCOptimizationCategory, Integer>(AOCOptimizationCategory.class);
 
-        private final AOCVisualBudget visualBudget = new AOCVisualBudget(16);
+    private final AOCVisualBudget visualBudget = new AOCVisualBudget(16);
 
     private boolean entityCulling = true;
     private boolean itemCulling = true;
@@ -30,7 +30,6 @@ public final class AOCOptimizationRuntime {
         for (AOCOptimizationCategory category : AOCOptimizationCategory.values()) {
             visibilityRanges.put(category, 32);
         }
-        
     }
 
     public static AOCOptimizationRuntime get() {
@@ -92,7 +91,7 @@ public final class AOCOptimizationRuntime {
         return value == null ? 32 : value;
     }
 
-        public synchronized void configureBudget(int checks) {
+    public synchronized void configureBudget(int checks) {
         visualBudget.setCapacity(clamp(checks, 0, 64));
     }
 
