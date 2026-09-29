@@ -219,6 +219,7 @@ public final class AOCTransformer implements IClassTransformer {
 
     private static void insertEntityShouldRenderHook(MethodNode m) {
         InsnList hook = new InsnList();
+        LabelNode cull = new LabelNode();
         LabelNode pass = new LabelNode();
 
         hook.add(new VarInsnNode(Opcodes.ALOAD, 1));
@@ -234,8 +235,8 @@ public final class AOCTransformer implements IClassTransformer {
                 "(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z",
                 false
         ));
+        hook.add(new JumpInsnNode(Opcodes.IFNE, cull));
 
-        hook.add(new JumpInsnNode(Opcodes.IFNE, pass));
         hook.add(new VarInsnNode(Opcodes.ALOAD, 1));
         hook.add(new VarInsnNode(Opcodes.ALOAD, 2));
         hook.add(new VarInsnNode(Opcodes.DLOAD, 3));
@@ -249,8 +250,9 @@ public final class AOCTransformer implements IClassTransformer {
                 "(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z",
                 false
         ));
-
         hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
+
+        hook.add(cull);
         hook.add(new InsnNode(Opcodes.ICONST_0));
         hook.add(new InsnNode(Opcodes.IRETURN));
         hook.add(pass);
