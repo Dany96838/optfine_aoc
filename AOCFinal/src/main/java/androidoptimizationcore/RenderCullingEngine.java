@@ -731,7 +731,7 @@ public final class RenderCullingEngine {
         }
 
         boolean isStale(long now) {
-            return now - createdTick > 6L;
+            return now - createdTick > 64L;
         }
     }
 
@@ -778,7 +778,7 @@ public final class RenderCullingEngine {
                 double cameraY,
                 double cameraZ,
                 AxisAlignedBB box) {
-            if (now - tick > 4L) return false;
+            if (now - tick > 20L) return false;
 
             double dx = cameraX - x;
             double dy = cameraY - y;
