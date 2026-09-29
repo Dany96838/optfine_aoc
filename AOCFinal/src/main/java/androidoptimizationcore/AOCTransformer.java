@@ -10,6 +10,7 @@ import org.objectweb.asm.tree.*;
 public final class AOCTransformer implements IClassTransformer {
     private static final String RM = "net.minecraft.client.renderer.entity.RenderManager";
     private static final String TE = "net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher";
+    private static final String PM = "net.minecraft.client.particle.ParticleManager";
 
     private static final String CULL_ENGINE = "androidoptimizationcore/RenderCullingEngine";
     private static final String ENTITY_DESC =
@@ -17,8 +18,10 @@ public final class AOCTransformer implements IClassTransformer {
 
     private static boolean loggedEntityHook;
     private static boolean loggedTileHook;
+    private static boolean loggedParticleHook;
     private static boolean loggedEntityMiss;
     private static boolean loggedTileMiss;
+    private static boolean loggedParticleMiss;
 
     @Override
     public byte[] transform(String name, String transformedName, byte[] basicClass) {
@@ -30,6 +33,9 @@ public final class AOCTransformer implements IClassTransformer {
             }
             if (TE.equals(name) || TE.equals(transformedName)) {
                 return patchTileDispatcher(basicClass);
+            }
+            if (PM.equals(name) || PM.equals(transformedName)) {
+                return patchParticleManager(basicClass);
             }
         } catch (Throwable t) {
             System.out.println("[AOC] Transformer failure for " + name + " / " + transformedName + ": " + t);
@@ -79,6 +85,37 @@ public final class AOCTransformer implements IClassTransformer {
         return write(cn);
     }
 
+    private byte[] patchParticleManager(byte[] bytes) {
+        ClassNode cn = read(bytes);
+        MethodNode target = null;
+
+        for (MethodNode m : cn.methods) {
+            if (isParticleAddEffectShape(m.desc)) {
+                target = m;
+                break;
+            }
+        }
+
+        if (target == null) {
+            if (!loggedParticleMiss) {
+                loggedParticleMiss = true;
+                System.out.println("[AOC] WARNING: ParticleManager.addEffect target was not found.");
+            }
+            return bytes;
+        }
+
+        if (!containsHook(target, "shouldCullParticle")) {
+            insertParticleHook(target);
+        }
+
+        if (!loggedParticleHook) {
+            loggedParticleHook = true;
+            System.out.println("[AOC] PATCHED ParticleManager.addEffect (descriptor/shape match)");
+        }
+
+        return write(cn);
+    }
+
     private byte[] patchTileDispatcher(byte[] bytes) {
         ClassNode cn = read(bytes);
         int patched = 0;
@@ -123,6 +160,19 @@ public final class AOCTransformer implements IClassTransformer {
                 && args[2].getSort() == Type.DOUBLE
                 && args[3].getSort() == Type.DOUBLE
                 && args[4].getSort() == Type.DOUBLE;
+    }
+
+    private static boolean isParticleAddEffectShape(String desc) {
+        Type[] args;
+        try {
+            args = Type.getArgumentTypes(desc);
+        } catch (Throwable ignored) {
+            return false;
+        }
+
+        return Type.getReturnType(desc).getSort() == Type.VOID
+                && args.length == 1
+                && args[0].getSort() == Type.OBJECT;
     }
 
     private static boolean isTileRenderShape(String desc) {
@@ -188,6 +238,25 @@ public final class AOCTransformer implements IClassTransformer {
         hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
         hook.add(new InsnNode(Opcodes.ICONST_0));
         hook.add(new InsnNode(Opcodes.IRETURN));
+        hook.add(pass);
+
+        m.instructions.insert(hook);
+    }
+
+    private static void insertParticleHook(MethodNode m) {
+        InsnList hook = new InsnList();
+        LabelNode pass = new LabelNode();
+
+        hook.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        hook.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                CULL_ENGINE,
+                "shouldCullParticle",
+                "(Lnet/minecraft/client/particle/Particle;)Z",
+                false
+        ));
+        hook.add(new JumpInsnNode(Opcodes.IFEQ, pass));
+        hook.add(new InsnNode(Opcodes.RETURN));
         hook.add(pass);
 
         m.instructions.insert(hook);
