@@ -15,6 +15,7 @@ import net.minecraft.entity.item.EntityFireworkRocket;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
@@ -267,22 +268,26 @@ public final class RenderCullingEngine {
             double dy = py - camY;
             double dz = pz - camZ;
 
-            double yawRad = Math.toRadians(camYaw);
-            double pitchRad = Math.toRadians(camPitch);
-            double cosPitch = Math.cos(pitchRad);
-            double forwardX = -Math.sin(yawRad) * cosPitch;
-            double forwardY = -Math.sin(pitchRad);
-            double forwardZ = Math.cos(yawRad) * cosPitch;
+            Entity camera = mc.getRenderViewEntity();
+            if (camera == null) return false;
 
+            Vec3d look = camera.getLook(mc.getRenderPartialTicks());
+            if (look == null) return false;
+
+            /*
+             * Use Minecraft's own interpolated camera look vector instead of
+             * rebuilding it from yaw/pitch. This follows the actual render
+             * camera direction and remains valid for custom camera entities.
+             */
             double halfDiagonal = 0.5D * Math.sqrt(
                     (box.maxX - box.minX) * (box.maxX - box.minX)
                             + (box.maxY - box.minY) * (box.maxY - box.minY)
                             + (box.maxZ - box.minZ) * (box.maxZ - box.minZ));
 
             double forwardProjection =
-                    dx * forwardX
-                            + dy * forwardY
-                            + dz * forwardZ;
+                    dx * look.xCoord
+                            + dy * look.yCoord
+                            + dz * look.zCoord;
 
             if (forwardProjection + halfDiagonal < -0.05D) {
                 return true;
