@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.resources.I18n;
 import net.minecraftforge.fml.client.config.GuiSlider;
+import net.minecraftforge.fml.client.config.GuiUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -311,34 +312,43 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
         tooltip.clear();
         addTooltipFor(hovered);
         if (!tooltip.isEmpty()) {
-            drawHoveringText(tooltip, mouseX, mouseY, fontRenderer);
+            GuiUtils.drawHoveringText(tooltip, mouseX, mouseY, width, height, 280, fontRenderer);
         }
     }
 
     private void addTooltipFor(GuiButton button) {
         switch (button.id) {
             case 1:
-                tooltip.add(tr("key.aoc.tooltip.entity"));
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.entity"), 260));
                 return;
             case 2:
-                tooltip.add(tr("key.aoc.tooltip.item"));
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.item"), 260));
                 return;
             case 3:
-                tooltip.add(tr("key.aoc.tooltip.tile"));
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.tile"), 260));
                 return;
             case 4:
-                tooltip.add(tr("key.aoc.tooltip.particle"));
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.particle"), 260));
                 return;
             case 5:
-                tooltip.add(tr("key.aoc.tooltip.effect"));
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.effect"), 260));
                 return;
             case 6:
-                tooltip.add(tr("key.aoc.tooltip.occlusion"));
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.occlusion"), 260));
                 return;
             case 8:
-                tooltip.add(tr("key.aoc.tooltip.reset"));
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.reset"), 260));
                 return;
             case 9:
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.done"), 260));
                 return;
             case 10:
                 addDistanceTooltip("key.aoc.tooltip.entity_distance",
