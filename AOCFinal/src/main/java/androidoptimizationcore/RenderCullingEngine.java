@@ -13,25 +13,37 @@ import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
+import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Client-side rendering culling for Minecraft 1.12.2.
+ * Client-side visibility policy and work scheduler for Minecraft 1.12.2.
  *
- * Safety/performance rules:
- * - never removes, unloads, freezes or modifies an Entity/TileEntity;
- * - fail-open whenever AOC cannot prove that an object is invisible;
- * - all World access stays on the Minecraft client thread;
- * - the configured budget counts actual ray traces, not just objects;
- * - the center visibility sample is tested first, avoiding extra rays for
- *   objects that are plainly visible.
+ * Expensive world ray traces are never performed from the render hook.
+ * Render hooks only consult a small cache and enqueue missing visibility
+ * work. The client tick processes that queue under the configured budget.
+ *
+ * Nothing here removes, unloads, freezes, or changes an Entity/TileEntity.
  */
 public final class RenderCullingEngine {
     private static final Map<Entity, CacheEntry> ENTITY_OCCLUSION =
             new HashMap<Entity, CacheEntry>();
     private static final Map<BlockPos, CacheEntry> TILE_OCCLUSION =
             new HashMap<BlockPos, CacheEntry>();
+
+    private static final Map<Entity, OcclusionTask<Entity>> ENTITY_PENDING =
+            new HashMap<Entity, OcclusionTask<Entity>>();
+    private static final Map<BlockPos, OcclusionTask<BlockPos>> TILE_PENDING =
+            new HashMap<BlockPos, OcclusionTask<BlockPos>>();
+
+    private static final ArrayDeque<OcclusionTask<?>> WORK_QUEUE =
+            new ArrayDeque<OcclusionTask<?>>();
+    private static final Set<Object> QUEUED =
+            new HashSet<Object>();
 
     private static Frustum tileFrustum =
             new Frustum(ClippingHelperImpl.getInstance());
@@ -41,7 +53,6 @@ public final class RenderCullingEngine {
     private static double camZ;
     private static World currentWorld;
     private static long tick;
-    private static int remainingChecks;
 
     private static boolean loggedEntityCull;
     private static boolean loggedTileCull;
@@ -69,8 +80,10 @@ public final class RenderCullingEngine {
 
     /**
      * Hooked into RenderManager.shouldRender().
-     * Vanilla keeps its normal distance/frustum decision; AOC only adds
-     * conservative solid-block occlusion within the configured range.
+     *
+     * The render hook performs only cheap checks. Missing occlusion data is
+     * fail-open for the current frame and is computed later on the client
+     * tick, preventing ray tracing from becoming a frame-time spike.
      */
     public static boolean shouldCullEntity(
             Entity entity,
@@ -93,8 +106,6 @@ public final class RenderCullingEngine {
             AxisAlignedBB box = entity.getEntityBoundingBox();
             if (box == null || box.hasNaN()) return false;
 
-            // Do not duplicate vanilla frustum work. This only avoids an
-            // unnecessary ray test when vanilla already rejected the box.
             if (camera != null && !entity.ignoreFrustumCheck
                     && !camera.isBoundingBoxInFrustum(box.grow(0.05D))) {
                 return false;
@@ -109,9 +120,10 @@ public final class RenderCullingEngine {
                 return false;
             }
 
-            return isOccluded(
+            return requestOcclusion(
                     mc.world,
                     ENTITY_OCCLUSION,
+                    ENTITY_PENDING,
                     entity,
                     box,
                     null,
@@ -125,7 +137,8 @@ public final class RenderCullingEngine {
 
     /**
      * TileEntities do not receive ICamera in their dispatcher API, so AOC
-     * supplies a conservative frustum plus optional solid-block occlusion.
+     * supplies a conservative frustum plus asynchronous solid-block
+     * occlusion.
      */
     public static boolean shouldCullTileEntity(TileEntity tileEntity) {
         try {
@@ -141,8 +154,6 @@ public final class RenderCullingEngine {
             if (box == null) box = new AxisAlignedBB(pos);
             if (box.hasNaN() || box == TileEntity.INFINITE_EXTENT_AABB) return false;
 
-            // Extremely large/custom render bounds are not safe candidates for
-            // conservative point sampling.
             if (box.maxX - box.minX > 64.0D
                     || box.maxY - box.minY > 64.0D
                     || box.maxZ - box.minZ > 64.0D) {
@@ -157,9 +168,7 @@ public final class RenderCullingEngine {
                 return true;
             }
 
-            if (!AOCConfig.occlusionCulling) {
-                return false;
-            }
+            if (!AOCConfig.occlusionCulling) return false;
 
             double dx = pos.getX() + 0.5D - camX;
             double dy = pos.getY() + 0.5D - camY;
@@ -170,9 +179,10 @@ public final class RenderCullingEngine {
                 return false;
             }
 
-            boolean result = isOccluded(
+            boolean result = requestOcclusion(
                     mc.world,
                     TILE_OCCLUSION,
+                    TILE_PENDING,
                     pos,
                     box,
                     pos,
@@ -191,9 +201,10 @@ public final class RenderCullingEngine {
         }
     }
 
-    private static <K> boolean isOccluded(
+    private static <K> boolean requestOcclusion(
             World world,
             Map<K, CacheEntry> cache,
+            Map<K, OcclusionTask<K>> pending,
             K key,
             AxisAlignedBB box,
             BlockPos targetBlock,
@@ -202,10 +213,7 @@ public final class RenderCullingEngine {
             double startZ) {
 
         if (currentWorld != world) {
-            currentWorld = world;
-            ENTITY_OCCLUSION.clear();
-            TILE_OCCLUSION.clear();
-            remainingChecks = Math.max(0, AOCConfig.occlusionBudget);
+            resetWorld(world);
         }
 
         CacheEntry cached = cache.get(key);
@@ -214,114 +222,173 @@ public final class RenderCullingEngine {
             return cached.occluded;
         }
 
-        if (remainingChecks <= 0) {
-            return false;
+        OcclusionTask<K> existing = pending.get(key);
+        if (existing != null) {
+            if (!existing.isCompatible(world, startX, startY, startZ, box)) {
+                pending.remove(key);
+                QUEUED.remove(key);
+            } else {
+                return false;
+            }
         }
 
-        OcclusionResult result = computeOcclusion(
-                world, box, targetBlock, startX, startY, startZ);
-
-        // Budget exhaustion is not evidence of visibility or occlusion.
-        // Do not cache that fail-open decision.
-        if (result == OcclusionResult.BUDGET_EXHAUSTED) {
-            return false;
+        if (!QUEUED.contains(key) && WORK_QUEUE.size() < 4096) {
+            OcclusionTask<K> task = new OcclusionTask<K>(
+                    world, key, box, targetBlock,
+                    startX, startY, startZ, tick);
+            pending.put(key, task);
+            QUEUED.add(key);
+            WORK_QUEUE.add(task);
         }
 
-        cache.put(
-                key,
-                new CacheEntry(
-                        result == OcclusionResult.OCCLUDED,
-                        tick,
-                        startX,
-                        startY,
-                        startZ,
-                        box));
-
-        if (result == OcclusionResult.OCCLUDED
-                && key instanceof Entity
-                && !loggedEntityCull) {
-            loggedEntityCull = true;
-            System.out.println("[AOC] Entity block-occlusion culling is active.");
-        }
-
-        return result == OcclusionResult.OCCLUDED;
+        return false;
     }
 
     public static void endClientTick() {
         tick++;
         updateCamera();
 
-        remainingChecks = Math.max(0, AOCConfig.occlusionBudget);
+        processVisibilityWork();
 
-        // Prevent long-session memory growth without doing per-frame map work.
         if (tick % 40L == 0L) {
-            if (ENTITY_OCCLUSION.size() > 8192) ENTITY_OCCLUSION.clear();
-            if (TILE_OCCLUSION.size() > 8192) TILE_OCCLUSION.clear();
+            cleanupCaches();
         }
     }
 
     /**
-     * Samples the center first, then the eight inset corners. An object is
-     * culled only if every sampled point is blocked by an opaque cube.
+     * Processes one sample per budget unit. A center sample is tested first;
+     * only objects whose center is blocked consume more samples. This makes
+     * visible objects cheap while retaining conservative multi-point culling.
      */
-    private static OcclusionResult computeOcclusion(
-            World world,
-            AxisAlignedBB box,
-            BlockPos targetBlock,
-            double startX,
-            double startY,
-            double startZ) {
+    private static void processVisibilityWork() {
+        int budget = Math.max(0, AOCConfig.occlusionBudget);
 
-        double ex = Math.min(0.05D,
-                Math.max(0.001D, (box.maxX - box.minX) * 0.25D));
-        double ey = Math.min(0.05D,
-                Math.max(0.001D, (box.maxY - box.minY) * 0.25D));
-        double ez = Math.min(0.05D,
-                Math.max(0.001D, (box.maxZ - box.minZ) * 0.25D));
+        while (budget > 0 && !WORK_QUEUE.isEmpty()) {
+            OcclusionTask<?> raw = WORK_QUEUE.poll();
+            if (raw == null) break;
 
-        double cx = (box.minX + box.maxX) * 0.5D;
-        double cy = (box.minY + box.maxY) * 0.5D;
-        double cz = (box.minZ + box.maxZ) * 0.5D;
+            QUEUED.remove(raw.key);
 
-        double[][] samples = new double[][] {
-                {cx, cy, cz},
-                {box.minX + ex, box.minY + ey, box.minZ + ez},
-                {box.maxX - ex, box.minY + ey, box.minZ + ez},
-                {box.minX + ex, box.maxY - ey, box.minZ + ez},
-                {box.maxX - ex, box.maxY - ey, box.minZ + ez},
-                {box.minX + ex, box.minY + ey, box.maxZ - ez},
-                {box.maxX - ex, box.minY + ey, box.maxZ - ez},
-                {box.minX + ex, box.maxY - ey, box.maxZ - ez},
-                {box.maxX - ex, box.maxY - ey, box.maxZ - ez}
-        };
-
-        BlockPos cameraBlock = new BlockPos(startX, startY, startZ);
-
-        for (double[] sample : samples) {
-            RayResult ray = rayBlockedByOpaqueBlock(
-                    world,
-                    startX, startY, startZ,
-                    sample[0], sample[1], sample[2],
-                    cameraBlock,
-                    targetBlock);
-
-            if (ray == RayResult.BUDGET_EXHAUSTED) {
-                return OcclusionResult.BUDGET_EXHAUSTED;
+            if (raw.world != currentWorld || raw.isStale(tick)) {
+                removePending(raw);
+                continue;
             }
 
-            if (ray == RayResult.VISIBLE) {
-                return OcclusionResult.VISIBLE;
+            RayResult ray = testSample(raw);
+            budget--;
+
+            if (ray == RayResult.BLOCKED) {
+                raw.sampleIndex++;
+                if (raw.sampleIndex >= raw.sampleCount()) {
+                    putCache(raw, true);
+                    removePending(raw);
+                } else {
+                    enqueueAgain(raw);
+                }
+            } else if (ray == RayResult.VISIBLE) {
+                putCache(raw, false);
+                removePending(raw);
+            } else {
+                // A failed/uncertain trace is fail-open. Do not cache it.
+                removePending(raw);
+            }
+        }
+    }
+
+    private static RayResult testSample(OcclusionTask<?> task) {
+        if (task.sampleIndex >= task.sampleCount()) return RayResult.VISIBLE;
+
+        double[] sample = task.sample(task.sampleIndex);
+        return rayBlockedByOpaqueBlock(
+                task.world,
+                task.startX, task.startY, task.startZ,
+                sample[0], sample[1], sample[2],
+                new BlockPos(task.startX, task.startY, task.startZ),
+                task.targetBlock);
+    }
+
+    private static void enqueueAgain(OcclusionTask<?> task) {
+        if (QUEUED.contains(task.key)) return;
+        if (WORK_QUEUE.size() >= 4096) {
+            removePending(task);
+            return;
+        }
+        QUEUED.add(task.key);
+        WORK_QUEUE.add(task);
+    }
+
+    private static void putCache(OcclusionTask<?> task, boolean occluded) {
+        CacheEntry entry = new CacheEntry(
+                occluded,
+                tick,
+                task.startX,
+                task.startY,
+                task.startZ,
+                task.box);
+
+        if (task.key instanceof Entity) {
+            ENTITY_OCCLUSION.put((Entity) task.key, entry);
+            if (occluded && !loggedEntityCull) {
+                loggedEntityCull = true;
+                System.out.println("[AOC] Entity block-occlusion culling is active.");
+            }
+        } else if (task.key instanceof BlockPos) {
+            TILE_OCCLUSION.put((BlockPos) task.key, entry);
+            if (occluded && !loggedTileCull) {
+                loggedTileCull = true;
+                System.out.println("[AOC] TileEntity block-occlusion culling is active.");
+            }
+        }
+    }
+
+    private static void removePending(OcclusionTask<?> task) {
+        if (task.key instanceof Entity) {
+            ENTITY_PENDING.remove((Entity) task.key);
+        } else if (task.key instanceof BlockPos) {
+            TILE_PENDING.remove((BlockPos) task.key);
+        }
+    }
+
+    private static void resetWorld(World world) {
+        currentWorld = world;
+        ENTITY_OCCLUSION.clear();
+        TILE_OCCLUSION.clear();
+        ENTITY_PENDING.clear();
+        TILE_PENDING.clear();
+        WORK_QUEUE.clear();
+        QUEUED.clear();
+    }
+
+    private static void cleanupCaches() {
+        if (ENTITY_OCCLUSION.size() > 8192) {
+            Iterator<Entity> it = ENTITY_OCCLUSION.keySet().iterator();
+            while (it.hasNext() && ENTITY_OCCLUSION.size() > 4096) {
+                Entity entity = it.next();
+                if (entity == null || entity.isDead || entity.world != currentWorld) {
+                    it.remove();
+                }
             }
         }
 
-        return OcclusionResult.OCCLUDED;
+        if (TILE_OCCLUSION.size() > 8192) {
+            Iterator<BlockPos> it = TILE_OCCLUSION.keySet().iterator();
+            while (it.hasNext() && TILE_OCCLUSION.size() > 4096) {
+                BlockPos pos = it.next();
+                if (pos == null || currentWorld == null
+                        || !currentWorld.isBlockLoaded(pos)) {
+                    it.remove();
+                }
+            }
+        }
+
+        if (WORK_QUEUE.size() > 4096) {
+            WORK_QUEUE.clear();
+            QUEUED.clear();
+            ENTITY_PENDING.clear();
+            TILE_PENDING.clear();
+        }
     }
 
-    /**
-     * Performs one world ray trace. A non-opaque first hit is traversed so
-     * ordinary glass does not become a false wall. The budget is consumed
-     * once per actual ray trace.
-     */
     private static RayResult rayBlockedByOpaqueBlock(
             World world,
             double startX,
@@ -333,93 +400,123 @@ public final class RenderCullingEngine {
             BlockPos cameraBlock,
             BlockPos targetBlock) {
 
-        if (remainingChecks <= 0) {
-            return RayResult.BUDGET_EXHAUSTED;
+        RayTraceResult hit = world.rayTraceBlocks(
+                new Vec3d(startX, startY, startZ),
+                new Vec3d(endX, endY, endZ),
+                false,
+                true,
+                false);
+
+        if (hit == null || hit.typeOfHit != RayTraceResult.Type.BLOCK) {
+            return RayResult.VISIBLE;
         }
 
-        double sx = startX;
-        double sy = startY;
-        double sz = startZ;
-
-        double dx = endX - startX;
-        double dy = endY - startY;
-        double dz = endZ - startZ;
-        double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-        if (length < 0.0001D) return RayResult.VISIBLE;
-
-        final int maxTransparentHits = 8;
-        final double advance = 0.002D;
-
-        for (int i = 0; i < maxTransparentHits; i++) {
-            if (remainingChecks <= 0) {
-                return RayResult.BUDGET_EXHAUSTED;
-            }
-            remainingChecks--;
-
-            RayTraceResult hit = world.rayTraceBlocks(
-                    new Vec3d(sx, sy, sz),
-                    new Vec3d(endX, endY, endZ),
-                    false,
-                    true,
-                    false);
-
-            if (hit == null || hit.typeOfHit != RayTraceResult.Type.BLOCK) {
-                return RayResult.VISIBLE;
-            }
-
-            BlockPos hitPos = hit.getBlockPos();
-            if (hitPos == null) return RayResult.VISIBLE;
-
-            if (targetBlock != null && targetBlock.equals(hitPos)) {
-                return RayResult.VISIBLE;
-            }
-
-            if (cameraBlock.equals(hitPos)) {
-                return RayResult.VISIBLE;
-            }
-
-            IBlockState state = world.getBlockState(hitPos);
-
-            if (state == null || !state.isOpaqueCube()) {
-                if (hit.hitVec == null) return RayResult.VISIBLE;
-
-                double nx = dx / length;
-                double ny = dy / length;
-                double nz = dz / length;
-
-                sx = hit.hitVec.x + nx * advance;
-                sy = hit.hitVec.y + ny * advance;
-                sz = hit.hitVec.z + nz * advance;
-
-                double rx = endX - sx;
-                double ry = endY - sy;
-                double rz = endZ - sz;
-
-                if (rx * dx + ry * dy + rz * dz <= 0.0D) {
-                    return RayResult.VISIBLE;
-                }
-
-                continue;
-            }
-
-            return RayResult.BLOCKED;
+        BlockPos hitPos = hit.getBlockPos();
+        if (hitPos == null
+                || cameraBlock.equals(hitPos)
+                || (targetBlock != null && targetBlock.equals(hitPos))) {
+            return RayResult.VISIBLE;
         }
 
-        // Too many transparent surfaces are not proof of occlusion.
-        return RayResult.VISIBLE;
+        IBlockState state = world.getBlockState(hitPos);
+        if (state == null || !state.isOpaqueCube()) {
+            // A non-opaque first hit is treated as transparent. We do not
+            // repeatedly ray trace through transparent blocks in the hot
+            // path; uncertainty is fail-open.
+            return RayResult.VISIBLE;
+        }
+
+        return RayResult.BLOCKED;
     }
 
     private enum RayResult {
         BLOCKED,
-        VISIBLE,
-        BUDGET_EXHAUSTED
+        VISIBLE
     }
 
-    private enum OcclusionResult {
-        OCCLUDED,
-        VISIBLE,
-        BUDGET_EXHAUSTED
+    private static final class OcclusionTask<K> {
+        final World world;
+        final K key;
+        final AxisAlignedBB box;
+        final BlockPos targetBlock;
+        final double startX;
+        final double startY;
+        final double startZ;
+        final long createdTick;
+        int sampleIndex;
+
+        OcclusionTask(
+                World world,
+                K key,
+                AxisAlignedBB box,
+                BlockPos targetBlock,
+                double startX,
+                double startY,
+                double startZ,
+                long createdTick) {
+            this.world = world;
+            this.key = key;
+            this.box = box;
+            this.targetBlock = targetBlock;
+            this.startX = startX;
+            this.startY = startY;
+            this.startZ = startZ;
+            this.createdTick = createdTick;
+        }
+
+        int sampleCount() {
+            return 5;
+        }
+
+        double[] sample(int index) {
+            double ex = Math.min(0.05D,
+                    Math.max(0.001D, (box.maxX - box.minX) * 0.25D));
+            double ey = Math.min(0.05D,
+                    Math.max(0.001D, (box.maxY - box.minY) * 0.25D));
+            double ez = Math.min(0.05D,
+                    Math.max(0.001D, (box.maxZ - box.minZ) * 0.25D));
+
+            double cx = (box.minX + box.maxX) * 0.5D;
+            double cy = (box.minY + box.maxY) * 0.5D;
+            double cz = (box.minZ + box.maxZ) * 0.5D;
+
+            switch (index) {
+                case 0: return new double[] {cx, cy, cz};
+                case 1: return new double[] {
+                        box.minX + ex, box.minY + ey, box.minZ + ez};
+                case 2: return new double[] {
+                        box.maxX - ex, box.maxY - ey, box.minZ + ez};
+                case 3: return new double[] {
+                        box.minX + ex, box.maxY - ey, box.maxZ - ez};
+                default: return new double[] {
+                        box.maxX - ex, box.minY + ey, box.maxZ - ez};
+            }
+        }
+
+        boolean isCompatible(
+                World current,
+                double x,
+                double y,
+                double z,
+                AxisAlignedBB currentBox) {
+            if (world != current) return false;
+
+            double dx = x - startX;
+            double dy = y - startY;
+            double dz = z - startZ;
+
+            return dx * dx + dy * dy + dz * dz <= 9.0D
+                    && Math.abs(box.minX - currentBox.minX) < 0.05D
+                    && Math.abs(box.minY - currentBox.minY) < 0.05D
+                    && Math.abs(box.minZ - currentBox.minZ) < 0.05D
+                    && Math.abs(box.maxX - currentBox.maxX) < 0.05D
+                    && Math.abs(box.maxY - currentBox.maxY) < 0.05D
+                    && Math.abs(box.maxZ - currentBox.maxZ) < 0.05D;
+        }
+
+        boolean isStale(long now) {
+            return now - createdTick > 6L;
+        }
     }
 
     private static final class CacheEntry {
@@ -428,7 +525,6 @@ public final class RenderCullingEngine {
         final double x;
         final double y;
         final double z;
-
         final double minX;
         final double minY;
         final double minZ;
@@ -443,13 +539,11 @@ public final class RenderCullingEngine {
                 double y,
                 double z,
                 AxisAlignedBB box) {
-
             this.occluded = occluded;
             this.tick = tick;
             this.x = x;
             this.y = y;
             this.z = z;
-
             this.minX = box.minX;
             this.minY = box.minY;
             this.minZ = box.minZ;
@@ -464,7 +558,6 @@ public final class RenderCullingEngine {
                 double cameraY,
                 double cameraZ,
                 AxisAlignedBB box) {
-
             if (now - tick > 4L) return false;
 
             double dx = cameraX - x;
