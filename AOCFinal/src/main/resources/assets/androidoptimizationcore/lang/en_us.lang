@@ -39,3 +39,4 @@ key.aoc.impact.budget_medium=Current impact: medium (%d). Balances occlusion res
 key.aoc.impact.budget_high=Current impact: high (%d). More checks update occlusion faster with higher CPU cost.
 key.categories.aoc=Android Optimization Core
 key.aoc.subtitle=Independent client-side rendering optimization for Forge 1.12.2
+key.aoc.tooltip.done=Closes the Android Optimization Core menu and saves the settings.
