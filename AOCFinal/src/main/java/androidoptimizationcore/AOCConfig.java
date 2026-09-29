@@ -10,13 +10,14 @@ public final class AOCConfig {
     private static Configuration cfg;
 
     public static boolean entityCulling = true;
+    public static boolean itemCulling = true;
     public static boolean tileEntityCulling = true;
     public static boolean occlusionCulling = true;
     public static boolean particleCulling = true;
     public static boolean effectCulling = true;
 
     public static int entityDistance = 32;
-    public static int entityExtraRange = 0;
+    public static int itemDistance = 32;
     public static int tileEntityDistance = 32;
     public static int particleDistance = 32;
     public static int effectDistance = 32;
@@ -35,6 +36,10 @@ public final class AOCConfig {
         entityCulling = cfg.getBoolean(
                 "entityCulling", "render", entityCulling,
                 "Client-side entity visibility optimization. Does not change entity logic."
+        );
+        itemCulling = cfg.getBoolean(
+                "itemCulling", "render", itemCulling,
+                "Client-side dropped-item visibility optimization."
         );
         tileEntityCulling = cfg.getBoolean(
                 "tileEntityCulling", "render", tileEntityCulling,
@@ -57,9 +62,9 @@ public final class AOCConfig {
                 "entityDistance", "render", entityDistance, 8, 640,
                 "Maximum AOC client-side entity visibility range."
         );
-        entityExtraRange = cfg.getInt(
-                "entityExtraRange", "render", entityExtraRange, 0, 128,
-                "Optional client-side entity range added beyond the vanilla range."
+        itemDistance = cfg.getInt(
+                "itemDistance", "render", itemDistance, 8, 640,
+                "Maximum AOC client-side dropped-item visibility range."
         );
         tileEntityDistance = cfg.getInt(
                 "tileEntityDistance", "render", tileEntityDistance, 8, 640,
@@ -87,6 +92,7 @@ public final class AOCConfig {
         AOCOptimizationRuntime runtime = AOCOptimizationRuntime.get();
 
         runtime.setEnabled(AOCOptimizationCategory.ENTITY, entityCulling);
+        runtime.setEnabled(AOCOptimizationCategory.ITEM, itemCulling);
         runtime.setEnabled(AOCOptimizationCategory.TILE_ENTITY, tileEntityCulling);
         runtime.setEnabled(AOCOptimizationCategory.BLOCK_VISUAL, occlusionCulling);
         runtime.setEnabled(AOCOptimizationCategory.PARTICLE, particleCulling);
@@ -94,7 +100,8 @@ public final class AOCConfig {
 
         runtime.setVisibilityRange(
                 AOCOptimizationCategory.ENTITY, entityDistance);
-        runtime.setEntityExtraRange(entityExtraRange);
+        runtime.setVisibilityRange(
+                AOCOptimizationCategory.ITEM, itemDistance);
         runtime.setVisibilityRange(
                 AOCOptimizationCategory.TILE_ENTITY, tileEntityDistance);
         runtime.setVisibilityRange(
@@ -107,13 +114,14 @@ public final class AOCConfig {
 
     public static void resetDefaults() {
         entityCulling = true;
+        itemCulling = true;
         tileEntityCulling = true;
         occlusionCulling = true;
         particleCulling = true;
         effectCulling = true;
 
         entityDistance = 32;
-        entityExtraRange = 0;
+        itemDistance = 32;
         tileEntityDistance = 32;
         particleDistance = 32;
         effectDistance = 32;
@@ -126,13 +134,14 @@ public final class AOCConfig {
         if (cfg == null) return;
 
         cfg.get("render", "entityCulling", entityCulling).set(entityCulling);
+        cfg.get("render", "itemCulling", itemCulling).set(itemCulling);
         cfg.get("render", "tileEntityCulling", tileEntityCulling).set(tileEntityCulling);
         cfg.get("render", "occlusionCulling", occlusionCulling).set(occlusionCulling);
         cfg.get("render", "particleCulling", particleCulling).set(particleCulling);
         cfg.get("render", "effectCulling", effectCulling).set(effectCulling);
 
         cfg.get("render", "entityDistance", entityDistance).set(entityDistance);
-        cfg.get("render", "entityExtraRange", entityExtraRange).set(entityExtraRange);
+        cfg.get("render", "itemDistance", itemDistance).set(itemDistance);
         cfg.get("render", "tileEntityDistance", tileEntityDistance).set(tileEntityDistance);
         cfg.get("render", "particleDistance", particleDistance).set(particleDistance);
         cfg.get("render", "effectDistance", effectDistance).set(effectDistance);
