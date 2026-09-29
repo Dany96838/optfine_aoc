@@ -32,6 +32,7 @@ public final class AndroidOptimizationCore {
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         AOCConfig.load(event.getSuggestedConfigurationFile());
+        AOCClientKeybinds.register();
     }
 
     @Mod.EventHandler
@@ -40,8 +41,6 @@ public final class AndroidOptimizationCore {
     }
 
     public static final class ClientEvents {
-        private boolean lastF6;
-
         @SubscribeEvent
         public void renderTick(TickEvent.RenderTickEvent event) {
             if (event.phase == TickEvent.Phase.START) {
@@ -57,11 +56,12 @@ public final class AndroidOptimizationCore {
 
         @SubscribeEvent
         public void key(InputEvent.KeyInputEvent event) {
-            boolean f6 = Keyboard.isKeyDown(Keyboard.KEY_F6);
-            if (f6 && !lastF6 && Minecraft.getMinecraft().currentScreen == null) {
-                Minecraft.getMinecraft().displayGuiScreen(new AOCGui(null));
+            while (AOCClientKeybinds.OPEN_MENU.isPressed()) {
+                Minecraft mc = Minecraft.getMinecraft();
+                if (mc.currentScreen == null) {
+                    mc.displayGuiScreen(new AOCGui(null));
+                }
             }
-            lastF6 = f6;
         }
 
         @SubscribeEvent
