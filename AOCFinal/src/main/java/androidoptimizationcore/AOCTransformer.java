@@ -76,6 +76,9 @@ public final class AOCTransformer implements IClassTransformer {
         if (!containsHook(target, "shouldCullEntity")) {
             insertEntityShouldRenderHook(target);
         }
+        if (!containsHook(target, "shouldForceExtendedEntityRender")) {
+            wrapEntityReturnForExtendedRange(target);
+        }
 
         if (!loggedEntityHook) {
             loggedEntityHook = true;
@@ -215,6 +218,41 @@ public final class AOCTransformer implements IClassTransformer {
         }
 
         return false;
+    }
+
+    private static void wrapEntityReturnForExtendedRange(MethodNode m) {
+        for (AbstractInsnNode insn = m.instructions.getFirst();
+             insn != null;
+             insn = insn.getNext()) {
+            if (insn.getOpcode() != Opcodes.IRETURN) continue;
+
+            InsnList patch = new InsnList();
+            LabelNode keep = new LabelNode();
+
+            patch.add(new InsnNode(Opcodes.DUP));
+            patch.add(new JumpInsnNode(Opcodes.IFNE, keep));
+            patch.add(new InsnNode(Opcodes.POP));
+
+            patch.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            patch.add(new VarInsnNode(Opcodes.ALOAD, 2));
+            patch.add(new VarInsnNode(Opcodes.DLOAD, 3));
+            patch.add(new VarInsnNode(Opcodes.DLOAD, 5));
+            patch.add(new VarInsnNode(Opcodes.DLOAD, 7));
+
+            patch.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    CULL_ENGINE,
+                    "shouldForceExtendedEntityRender",
+                    "(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z",
+                    false
+            ));
+            patch.add(new JumpInsnNode(Opcodes.IFEQ, keep));
+            patch.add(new InsnNode(Opcodes.ICONST_1));
+            patch.add(keep);
+
+            m.instructions.insertBefore(insn, patch);
+            return;
+        }
     }
 
     private static void insertEntityShouldRenderHook(MethodNode m) {
