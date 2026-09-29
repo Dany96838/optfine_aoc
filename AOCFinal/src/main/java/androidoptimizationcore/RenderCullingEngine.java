@@ -725,9 +725,12 @@ public final class RenderCullingEngine {
 
         int sampleCount() {
             /*
-             * Stage 1 deliberately uses one center ray. This keeps wall
-             * occlusion cheap for large groups of mobs/items while avoiding
-             * the multi-ray cost that made the previous scheduler too slow.
+             * Use one center ray for the normal fast path. AOC only hides an
+             * object after this ray is blocked by a genuinely opaque full
+             * block. The result is then retained for several ticks so a
+             * large mob group does not immediately refill the ray queue every
+             * tick. This is intentionally conservative and does not alter
+             * the already-working particle/player paths.
              */
             return 1;
         }
@@ -834,7 +837,7 @@ public final class RenderCullingEngine {
                 double cameraY,
                 double cameraZ,
                 AxisAlignedBB box) {
-            long maxAge = occluded ? 1L : 20L;
+            long maxAge = occluded ? 6L : 20L;
             if (now - tick > maxAge) return false;
 
             double dx = cameraX - x;
