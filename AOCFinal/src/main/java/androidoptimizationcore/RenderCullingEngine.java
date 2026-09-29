@@ -4,7 +4,6 @@ import androidoptimizationcore.api.AOCOptimizationRuntime;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.ICamera;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
 import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
@@ -55,7 +54,6 @@ public final class RenderCullingEngine {
             new ArrayDeque<OcclusionTask<?>>();
     private static final Set<Object> QUEUED =
             new HashSet<Object>();
-    private static final Frustum TILE_FRUSTUM = new Frustum();
 
     private static double camX;
     private static double camY;
@@ -85,7 +83,6 @@ public final class RenderCullingEngine {
         camZ = camera.prevPosZ + (camera.posZ - camera.prevPosZ) * pt;
         camYaw = camera.prevRotationYaw + (camera.rotationYaw - camera.prevRotationYaw) * pt;
         camPitch = camera.prevRotationPitch + (camera.rotationPitch - camera.prevRotationPitch) * pt;
-        TILE_FRUSTUM.setPosition(camX, camY, camZ);
     }
 
     /**
@@ -321,14 +318,6 @@ public final class RenderCullingEngine {
             if (box.maxX - box.minX > 64.0D
                     || box.maxY - box.minY > 64.0D
                     || box.maxZ - box.minZ > 64.0D) {
-                return false;
-            }
-
-            // Evaluate the vanilla clipping planes at the actual TileEntity render hook.
-            // Unlike a frustum sampled from RenderTickEvent.START, this uses the
-            // renderer's current OpenGL clipping state and avoids the observed
-            // lower-screen false culls.
-            if (!TILE_FRUSTUM.isBoundingBoxInFrustum(box)) {
                 return false;
             }
 
