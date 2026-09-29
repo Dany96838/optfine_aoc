@@ -1,1 +1,1 @@
-AOC is a Forge 1.12.2 coremod. The OptiFine G5 requirement is validated at runtime because OptiFine is loaded through the legacy LaunchWrapper/Tweaker path rather than as a normal Forge dependency.
+AOC is a Forge 1.12.2 coremod. OptiFine is optional; AOC does not require or call OptiFine APIs. The coremod hooks only supported Minecraft/Forge client rendering paths and fails open when a hook target is unavailable.
