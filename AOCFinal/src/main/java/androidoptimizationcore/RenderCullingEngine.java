@@ -179,8 +179,11 @@ public final class RenderCullingEngine {
             double dy = entity.posY - renderCamY;
             double dz = entity.posZ - renderCamZ;
             double distanceSq = dx * dx + dy * dy + dz * dz;
+            double aocLimit = (double) AOCConfig.entityDistance
+                    + (double) AOCConfig.entityExtraRange;
 
-            return distanceSq < allowed * allowed;
+            return distanceSq < allowed * allowed
+                    && distanceSq < aocLimit * aocLimit;
         } catch (Throwable ignored) {
             return false;
         }
