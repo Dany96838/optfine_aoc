@@ -120,10 +120,19 @@ public final class AOCTransformer implements IClassTransformer {
 
         for (MethodNode m : cn.methods) {
             if (!isTileRenderShape(m.desc)) continue;
-            if (containsHook(m, "shouldCullTileEntity")) continue;
 
-            insertTileHook(m);
-            patched++;
+            boolean changed = false;
+            if (!containsHook(m, "shouldCullTileEntity")) {
+                insertTileHook(m);
+                changed = true;
+            }
+            if (isTileDistanceWrapperShape(m.desc)
+                    && !containsHook(m, "getTileEntityMaxRenderDistanceSquared")) {
+                patchTileDistanceLimit(m);
+                changed = true;
+            }
+
+            if (changed) patched++;
         }
 
         if (patched == 0) {
@@ -257,6 +266,43 @@ public final class AOCTransformer implements IClassTransformer {
         }
 
         return true;
+    }
+
+    private static boolean isTileDistanceWrapperShape(String desc) {
+        Type[] args;
+        try {
+            args = Type.getArgumentTypes(desc);
+        } catch (Throwable ignored) {
+            return false;
+        }
+
+        return Type.getReturnType(desc).getSort() == Type.VOID
+                && args.length == 3
+                && args[0].getSort() == Type.OBJECT
+                && args[1].getSort() == Type.FLOAT
+                && args[2].getSort() == Type.INT;
+    }
+
+    private static void patchTileDistanceLimit(MethodNode m) {
+        for (AbstractInsnNode insn = m.instructions.getFirst();
+             insn != null;
+             insn = insn.getNext()) {
+            if (!(insn instanceof MethodInsnNode)) continue;
+
+            MethodInsnNode call = (MethodInsnNode) insn;
+            if (!"getMaxRenderDistanceSquared".equals(call.name)
+                    || Type.getReturnType(call.desc).getSort() != Type.DOUBLE
+                    || Type.getArgumentTypes(call.desc).length != 0) {
+                continue;
+            }
+
+            call.setOpcode(Opcodes.INVOKESTATIC);
+            call.owner = CULL_ENGINE;
+            call.name = "getTileEntityMaxRenderDistanceSquared";
+            call.desc = "(Lnet/minecraft/tileentity/TileEntity;)D";
+            call.itf = false;
+            return;
+        }
     }
 
     private static boolean isTileRenderShape(String desc) {
