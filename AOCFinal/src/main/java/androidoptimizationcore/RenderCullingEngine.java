@@ -152,17 +152,17 @@ public final class RenderCullingEngine {
     }
 
     /**
-     * TileEntities do not receive ICamera in their dispatcher API, so AOC
-     * supplies a conservative frustum plus asynchronous solid-block
-     * occlusion.
+     * TileEntities do not receive ICamera in their dispatcher API. AOC therefore
+     * keeps this path independent of the renderer's frustum state and uses only
+     * the configured distance plus conservative solid-block occlusion.
      */
     /**
      * Extends the vanilla entity render-distance decision without changing
      * entity state. This is consulted only when vanilla returned false.
      *
      * Vanilla 1.12.2 uses the entity bounding-box average edge length,
-     * multiplied by 64 and renderDistanceWeight (1.0), as its base distance.
-     * AOC adds only the separately configured 0..128 block extension.
+     * multiplied by 64 and renderDistanceWeight as its base distance. AOC
+     * can extend that client-side decision up to the configured category range.
      */
     public static boolean shouldForceExtendedEntityRender(
             Entity entity,
