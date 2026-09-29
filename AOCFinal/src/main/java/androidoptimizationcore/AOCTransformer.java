@@ -94,6 +94,7 @@ public final class AOCTransformer implements IClassTransformer {
 
         for (MethodNode m : cn.methods) {
             if (!isParticleRenderMethodShape(m.desc)) continue;
+            if (containsHook(m, "shouldCullParticle")) continue;
             patched += patchParticleRenderCalls(m);
         }
 
