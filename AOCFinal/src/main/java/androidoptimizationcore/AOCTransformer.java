@@ -227,10 +227,12 @@ public final class AOCTransformer implements IClassTransformer {
             if (insn.getOpcode() != Opcodes.IRETURN) continue;
 
             InsnList patch = new InsnList();
-            LabelNode keep = new LabelNode();
+            LabelNode keepOriginal = new LabelNode();
+            LabelNode noExtension = new LabelNode();
+            LabelNode done = new LabelNode();
 
             patch.add(new InsnNode(Opcodes.DUP));
-            patch.add(new JumpInsnNode(Opcodes.IFNE, keep));
+            patch.add(new JumpInsnNode(Opcodes.IFNE, keepOriginal));
             patch.add(new InsnNode(Opcodes.POP));
 
             patch.add(new VarInsnNode(Opcodes.ALOAD, 1));
@@ -246,9 +248,17 @@ public final class AOCTransformer implements IClassTransformer {
                     "(Lnet/minecraft/entity/Entity;Lnet/minecraft/client/renderer/culling/ICamera;DDD)Z",
                     false
             ));
-            patch.add(new JumpInsnNode(Opcodes.IFEQ, keep));
+            patch.add(new JumpInsnNode(Opcodes.IFEQ, noExtension));
             patch.add(new InsnNode(Opcodes.ICONST_1));
-            patch.add(keep);
+            patch.add(new JumpInsnNode(Opcodes.GOTO, done));
+
+            patch.add(noExtension);
+            patch.add(new InsnNode(Opcodes.ICONST_0));
+            patch.add(new JumpInsnNode(Opcodes.GOTO, done));
+
+            patch.add(keepOriginal);
+            patch.add(new JumpInsnNode(Opcodes.GOTO, done));
+            patch.add(done);
 
             m.instructions.insertBefore(insn, patch);
             return;
