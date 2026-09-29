@@ -6,6 +6,8 @@ import net.minecraft.client.renderer.culling.ClippingHelperImpl;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.client.particle.Particle;
+import net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher;
+import net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityAreaEffectCloud;
 import net.minecraft.entity.effect.EntityLightningBolt;
@@ -277,6 +279,12 @@ public final class RenderCullingEngine {
 
             BlockPos pos = tileEntity.getPos();
             if (pos == null) return false;
+
+            TileEntitySpecialRenderer renderer =
+                    TileEntityRendererDispatcher.instance.getRenderer(tileEntity);
+            if (renderer != null && renderer.isGlobalRenderer(tileEntity)) {
+                return false;
+            }
 
             AxisAlignedBB box = tileEntity.getRenderBoundingBox();
             if (box == null) box = new AxisAlignedBB(pos);
