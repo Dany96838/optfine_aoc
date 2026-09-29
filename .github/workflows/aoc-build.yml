@@ -44,16 +44,16 @@ jobs:
         run: |
           mkdir -p ../releases
           JAR="$(find build/libs -maxdepth 1 -type f -name '*.jar' | head -n 1)"
-          cp "$JAR" ../releases/AndroidOptimizationCore-1.3.0.jar
+          cp "$JAR" ../releases/AndroidOptimizationCore-1.4.0.jar
           cd ..
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add releases/AndroidOptimizationCore-1.3.0.jar
+          git add releases/AndroidOptimizationCore-1.4.0.jar
           git diff --cached --quiet || git commit -m "Publish AndroidOptimizationCore 1.3.0 JAR"
           git push
 
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidOptimizationCore-1.3.0
+          name: AndroidOptimizationCore-1.4.0
           path: AOCFinal/build/libs/*.jar
