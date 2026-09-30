@@ -12,6 +12,8 @@ public final class AOCTransformer implements IClassTransformer {
     private static final String TE = "net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher";
     private static final String PM = "net.minecraft.client.particle.ParticleManager";
     private static final String RG = "net.minecraft.client.renderer.RenderGlobal";
+    private static final String RP = "net.minecraft.client.renderer.entity.RenderPlayer";
+    private static final String FR = "net.minecraft.client.gui.FontRenderer";
 
     private static final String CULL_ENGINE = "androidoptimizationcore/RenderCullingEngine";
     private static final String ENTITY_DESC =
@@ -42,6 +44,12 @@ public final class AOCTransformer implements IClassTransformer {
             }
             if (RG.equals(name) || RG.equals(transformedName)) {
                 return patchRenderGlobalTileCalls(basicClass);
+            }
+            if (RP.equals(name) || RP.equals(transformedName)) {
+                return patchRenderPlayerName(basicClass);
+            }
+            if (FR.equals(name) || FR.equals(transformedName)) {
+                return patchFontRenderer(basicClass);
             }
         } catch (Throwable t) {
             System.out.println("[AOC] Transformer failure for " + name + " / " + transformedName + ": " + t);
@@ -620,6 +628,90 @@ public final class AOCTransformer implements IClassTransformer {
      * simplesmente nao existe entrada no batch, e o drawBatch final desenha
      * o que sobrou. O batch nunca quebra.
      */
+    /**
+     * Player name tags are rendered through RenderPlayer.renderEntityName().
+     * AOC marks only that narrow call scope, so ordinary GUI/chat text is
+     * never affected by the player-name opacity setting.
+     */
+    private byte[] patchRenderPlayerName(byte[] bytes) {
+        ClassNode cn = read(bytes);
+        int patched = 0;
+
+        for (MethodNode m : cn.methods) {
+            if (!isPlayerNameRenderShape(m.desc)) continue;
+            if (containsHook(m, "beginPlayerNameRender")) continue;
+
+            InsnList begin = new InsnList();
+            begin.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    CULL_ENGINE,
+                    "beginPlayerNameRender",
+                    "()V",
+                    false));
+            m.instructions.insert(begin);
+
+            for (AbstractInsnNode insn = m.instructions.getFirst();
+                 insn != null; insn = insn.getNext()) {
+                if (insn.getOpcode() == Opcodes.RETURN) {
+                    InsnList end = new InsnList();
+                    end.add(new MethodInsnNode(
+                            Opcodes.INVOKESTATIC,
+                            CULL_ENGINE,
+                            "endPlayerNameRender",
+                            "()V",
+                            false));
+                    m.instructions.insertBefore(insn, end);
+                }
+            }
+            patched++;
+        }
+
+        if (patched == 0) return bytes;
+        System.out.println("[AOC] PATCHED RenderPlayer name-tag opacity scope: " + patched);
+        return write(cn);
+    }
+
+    private static boolean isPlayerNameRenderShape(String desc) {
+        try {
+            Type[] args = Type.getArgumentTypes(desc);
+            if (Type.getReturnType(desc).getSort() != Type.VOID) return false;
+            return args.length == 6
+                    && args[0].getSort() == Type.OBJECT
+                    && args[1].getSort() == Type.DOUBLE
+                    && args[2].getSort() == Type.DOUBLE
+                    && args[3].getSort() == Type.DOUBLE
+                    && args[4].getSort() == Type.OBJECT
+                    && args[5].getSort() == Type.DOUBLE;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /** Patches FontRenderer.renderString(String,float,float,int,boolean). */
+    private byte[] patchFontRenderer(byte[] bytes) {
+        ClassNode cn = read(bytes);
+        int patched = 0;
+        for (MethodNode m : cn.methods) {
+            if (!"(Ljava/lang/String;FFIZ)I".equals(m.desc)) continue;
+            if (containsHook(m, "adjustPlayerNameColor")) continue;
+
+            InsnList hook = new InsnList();
+            hook.add(new VarInsnNode(Opcodes.ILOAD, 3));
+            hook.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    CULL_ENGINE,
+                    "adjustPlayerNameColor",
+                    "(I)I",
+                    false));
+            hook.add(new VarInsnNode(Opcodes.ISTORE, 3));
+            m.instructions.insert(hook);
+            patched++;
+        }
+        if (patched == 0) return bytes;
+        System.out.println("[AOC] PATCHED FontRenderer player-name color adjustment: " + patched);
+        return write(cn);
+    }
+
     private byte[] patchRenderGlobalTileCalls(byte[] bytes) {
         ClassNode cn = read(bytes);
         int patched = 0;
