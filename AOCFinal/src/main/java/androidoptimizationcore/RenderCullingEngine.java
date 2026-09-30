@@ -249,63 +249,35 @@ public final class RenderCullingEngine {
             AxisAlignedBB box = particle.getBoundingBox();
             if (box == null || box.hasNaN()) return false;
 
+            /*
+             * IMPORTANT:
+             * This method is called only at the particle draw call.
+             * It must NEVER touch ParticleManager queues, updateEffects(),
+             * particle lifetime or the particle's state.
+             *
+             * For this first reliable particle implementation we use only
+             * distance. Camera/frustum rejection is deliberately omitted so
+             * that turning the camera away cannot make a particle appear to
+             * have been removed. The particle keeps updating normally and is
+             * rendered again as soon as it is inside the configured range.
+             */
+            Entity camera = mc.getRenderViewEntity();
+            if (camera == null) return false;
+
             double px = (box.minX + box.maxX) * 0.5D;
             double py = (box.minY + box.maxY) * 0.5D;
             double pz = (box.minZ + box.maxZ) * 0.5D;
 
-            /*
-             * ParticleManager does not expose the active ICamera to this hook.
-             * Use the actual render-view entity look vector for the one frustum
-             * case that matters here: a particle that is completely behind the
-             * camera. The half-diagonal margin makes this fail-open for large
-             * particle bounds that cross the camera plane.
-             */
-            double dx = px - camX;
-            double dy = py - camY;
-            double dz = pz - camZ;
-
-            Entity camera = mc.getRenderViewEntity();
-            if (camera == null) return false;
-
-            Vec3d look = camera.getLook(mc.getRenderPartialTicks());
-            if (look == null) return false;
-
-            /*
-             * Use Minecraft's own interpolated camera look vector instead of
-             * rebuilding it from yaw/pitch. This follows the actual render
-             * camera direction and remains valid for custom camera entities.
-             */
-            double halfDiagonal = 0.5D * Math.sqrt(
-                    (box.maxX - box.minX) * (box.maxX - box.minX)
-                            + (box.maxY - box.minY) * (box.maxY - box.minY)
-                            + (box.maxZ - box.minZ) * (box.maxZ - box.minZ));
-
-            double forwardProjection =
-                    dx * look.x
-                            + dy * look.y
-                            + dz * look.z;
-
-            if (forwardProjection + halfDiagonal < -0.05D) {
-                return true;
-            }
+            double dx = px - camera.posX;
+            double dy = py - camera.posY;
+            double dz = pz - camera.posZ;
 
             double distance = AOCConfig.particleDistance;
-
-            if (dx * dx + dy * dy + dz * dz > distance * distance) {
-                return true;
-            }
-
-            /*
-             * Particle wall occlusion is intentionally deferred to the
-             * particle stage. Particles do not enter the entity/TileEntity
-             * wall-occlusion queue or consume its ray budget.
-             */
-            return false;
+            return dx * dx + dy * dy + dz * dz > distance * distance;
         } catch (Throwable ignored) {
             return false;
         }
     }
-
 
     /**
      * Expands the dispatcher's vanilla TileEntity range only when AOC is
