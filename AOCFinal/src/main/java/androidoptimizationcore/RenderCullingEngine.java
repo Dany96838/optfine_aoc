@@ -330,15 +330,11 @@ public final class RenderCullingEngine {
             if (box == null || box.hasNaN()) return false;
 
             /*
-             * IMPORTANT:
-             * This method is called only at the particle draw call.
-             * It must NEVER touch ParticleManager queues, updateEffects(),
-             * particle lifetime or the particle's state.
+             * Render-only particle optimization:
+             *   - configured distance;
+             *   - cheap camera-facing test.
              *
-             * For this first reliable particle implementation we use only
-             * distance. Camera/frustum rejection is deliberately omitted so
-             * that turning the camera away cannot make a particle appear to             * have been removed. The particle keeps updating normally and is
-             * rendered again as soon as it is inside the configured range.
+             * Particle state, lifetime, queues and updates are untouched.
              */
             Entity camera = mc.getRenderViewEntity();
             if (camera == null) return false;
@@ -348,11 +344,21 @@ public final class RenderCullingEngine {
             double pz = (box.minZ + box.maxZ) * 0.5D;
 
             double dx = px - camera.posX;
-            double dy = py - camera.posY;
+            double dy = py - (camera.posY + camera.getEyeHeight());
             double dz = pz - camera.posZ;
 
+            double distanceSq = dx * dx + dy * dy + dz * dz;
             double distance = AOCConfig.particleDistance;
-            return dx * dx + dy * dy + dz * dz > distance * distance;
+            if (distanceSq > distance * distance) return true;
+
+            double length = Math.sqrt(distanceSq);
+            if (length <= 1.0E-6D) return false;
+
+            Vec3d look = camera.getLook(mc.getRenderPartialTicks());
+            double dot = dx * look.x + dy * look.y + dz * look.z;
+
+            // Behind the camera: skip the draw call.
+            return dot < -(length * 0.05D);
         } catch (Throwable ignored) {
             return false;
         }
@@ -914,12 +920,12 @@ public final class RenderCullingEngine {
 
         int sampleCount() {
             /*
-             * Center first. If the center is visible, the object is visible.
-             * If the center is blocked, test four additional points before
-             * hiding it. This prevents a large/custom render box from being
-             * culled when only its center happens to be behind a solid block.
+             * Entity models are compact, so one center ray is enough for the
+             * normal mob/entity wall test and lets the budget classify many
+             * entities quickly. TileEntities retain five samples because
+             * modded render bounds can be large or unusual.
              */
-            return 5;
+            return key instanceof Entity ? 1 : 5;
         }
 
         double[] sample(int index) {
@@ -1024,7 +1030,7 @@ public final class RenderCullingEngine {
                 double cameraY,
                 double cameraZ,
                 AxisAlignedBB box) {
-            long maxAge = occluded ? 6L : 20L;
+            long maxAge = 20L;
             if (now - tick > maxAge) return false;
 
             double dx = cameraX - x;
