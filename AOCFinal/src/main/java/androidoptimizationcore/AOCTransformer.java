@@ -297,40 +297,34 @@ public final class AOCTransformer implements IClassTransformer {
     }
 
     private static boolean isParticleRenderCall(MethodInsnNode call) {
-        if (call == null) return false;
+        if (call == null || call.getOpcode() != Opcodes.INVOKEVIRTUAL) return false;
 
         /*
-         * Forge/Minecraft 1.12.2 ParticleManager calls exactly:
-         *
-         * Particle.renderParticle(BufferBuilder, Entity, float,
-         *     float, float, float, float, float) -> void
-         *
-         * Match the Particle owner/name/descriptor, not merely any
-         * (Object,Object,float,float,float,float,float,float)->void call.
-         * In obfuscated runtime the owner/name are resolved separately below.
+         * The two ParticleManager render methods call Particle.renderParticle.
+         * The owner and descriptor names vary with runtime mappings, so the
+         * stable signature is matched here. This matcher is only reached from
+         * the exact renderParticles/renderLitParticles methods, never from
+         * spawn/update code.
          */
-        String particleOwner = "net/minecraft/client/particle/Particle";
-        String particleName = "renderParticle";
-        String particleDesc =
-                "(Lnet/minecraft/client/renderer/BufferBuilder;"
-                + "Lnet/minecraft/entity/Entity;FFFFFF)V";
-
-        boolean ownerMatch = particleOwner.equals(call.owner)
-                || "net/minecraft/client/particle/Particle".equals(call.owner)
-                || "net/minecraft/client/particle/Particle".equals(call.owner);
-
-        if (!ownerMatch) {
-            /*
-             * In obfuscated 1.12.2 the Particle class is "bre" in common
-             * Notch mappings and renderParticle is "a". Keep the descriptor
-             * check as the final guard; do not accept unrelated calls.
-             */
-            if (!"bre".equals(call.owner)) return false;
-            if (!"a".equals(call.name)) return false;
-            return "(Lfb;Lvg;FFFFFF)V".equals(call.desc);
+        Type[] args;
+        try {
+            args = Type.getArgumentTypes(call.desc);
+        } catch (Throwable ignored) {
+            return false;
         }
 
-        return particleName.equals(call.name) && particleDesc.equals(call.desc);
+        if (Type.getReturnType(call.desc).getSort() != Type.VOID
+                || args.length != 8
+                || args[0].getSort() != Type.OBJECT
+                || args[1].getSort() != Type.OBJECT) {
+            return false;
+        }
+
+        for (int i = 2; i < args.length; i++) {
+            if (args[i].getSort() != Type.FLOAT) return false;
+        }
+
+        return "renderParticle".equals(call.name) || "a".equals(call.name);
     }
 
     private static boolean isTileDistanceWrapperShape(String desc) {
