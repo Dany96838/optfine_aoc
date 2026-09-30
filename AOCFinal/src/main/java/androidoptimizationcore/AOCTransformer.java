@@ -641,7 +641,19 @@ public final class AOCTransformer implements IClassTransformer {
             if (!isPlayerNameRenderShape(m.desc)) continue;
             if (containsHook(m, "beginPlayerNameRender")) continue;
 
+            LabelNode hidden = new LabelNode();
+            LabelNode render = new LabelNode();
+
             InsnList begin = new InsnList();
+            begin.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    CULL_ENGINE,
+                    "shouldHidePlayerName",
+                    "()Z",
+                    false));
+            begin.add(new JumpInsnNode(Opcodes.IFEQ, render));
+            begin.add(new InsnNode(Opcodes.RETURN));
+            begin.add(render);
             begin.add(new MethodInsnNode(
                     Opcodes.INVOKESTATIC,
                     CULL_ENGINE,
