@@ -145,6 +145,10 @@ public final class AOCConfig {
         tileEntityDistance = 32;
         particleDistance = 32;
         effectDistance = 32;
+        playerCulling = false;
+        playerNameOpacityEnabled = true;
+        playerDistance = 32;
+        playerNameOpacity = 1.0F;
         occlusionBudget = 16;
 
         applyToRuntime();
