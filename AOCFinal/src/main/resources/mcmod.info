@@ -1,6 +1,6 @@
 [
   {
-    "modid": "androidoptimizationcore",
+    "modid": "advancedoptimizationcore",
     "name": "Advanced Optimization Core",
     "description": "Client-side optimization mod for Minecraft 1.12.2. Advanced Optimization Core improves rendering performance through conservative entity and TileEntity culling, solid-block occlusion checks, configurable visibility ranges, and a bounded per-tick visibility budget. Objects are not deleted, unloaded, frozen, or changed in game/server state. OptiFine is optional; AOC does not depend on OptiFine APIs. Press F4 to open AOC settings.",
     "version": "${version}",
