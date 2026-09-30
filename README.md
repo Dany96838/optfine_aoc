@@ -4,7 +4,7 @@ Advanced Optimization Core is a client-side optimization mod for Minecraft 1.12.
 
 ## Informações
 - **Versão:** 1.4.1
-- **Mod ID:** `androidoptimizationcore`
+- **Mod ID:** `advancedoptimizationcore`
 - **Autores:** Raposito9
 - **Minecraft:** 1.12.2
 
