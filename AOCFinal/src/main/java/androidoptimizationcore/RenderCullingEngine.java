@@ -98,7 +98,18 @@ public final class RenderCullingEngine {
                 return false;
             }
 
-            if (entity instanceof EntityPlayer) return false;
+            /*
+             * Player visibility is handled by the same generic entity pipeline.
+             * The local player is always exempt because it is the camera/player
+             * being controlled. Other players are ordinary client-side visual
+             * entities here: their model can be hidden by Entity Distance or
+             * conservative block occlusion, while their world state, movement,
+             * inventory and server synchronization continue normally.
+             */
+            Minecraft mc = Minecraft.getMinecraft();
+            if (mc == null || mc.world == null) return false;
+
+            if (entity == mc.getRenderViewEntity()) return false;
 
             boolean droppedItem = entity instanceof EntityItem;
             if (droppedItem) {
@@ -106,10 +117,6 @@ public final class RenderCullingEngine {
             } else if (!AOCConfig.entityCulling) {
                 return false;
             }
-
-            Minecraft mc = Minecraft.getMinecraft();
-            if (mc == null || mc.world == null) return false;
-            if (entity == mc.getRenderViewEntity()) return false;
 
             AxisAlignedBB box = entity.getEntityBoundingBox();
             if (box == null || box.hasNaN()) return false;
@@ -160,8 +167,13 @@ public final class RenderCullingEngine {
             double renderCamZ) {
         try {
             if (entity == null) return false;
-            if (entity instanceof EntityPlayer) return false;
 
+            /*
+             * Players use the same configurable Entity Distance as other
+             * entities. This method is only a range-extension helper for
+             * Vanilla's Render.shouldRender() result; it never changes player
+             * simulation or state.
+             */
             boolean droppedItem = entity instanceof EntityItem;
             if (droppedItem) {
                 if (!AOCConfig.itemCulling) return false;
