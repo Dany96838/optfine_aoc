@@ -15,12 +15,16 @@ public final class AOCConfig {
     public static boolean occlusionCulling = true;
     public static boolean particleCulling = true;
     public static boolean effectCulling = true;
+    public static boolean playerCulling = false;
+    public static boolean playerNameOpacityEnabled = true;
 
     public static int entityDistance = 32;
     public static int itemDistance = 32;
     public static int tileEntityDistance = 32;
     public static int particleDistance = 32;
     public static int effectDistance = 32;
+    public static int playerDistance = 32;
+    public static float playerNameOpacity = 1.0F;
     public static int occlusionBudget = 16;
 
     private AOCConfig() {}
@@ -57,6 +61,14 @@ public final class AOCConfig {
                 "effectCulling", "render", effectCulling,
                 "Client-side visual-effect visibility optimization."
         );
+        playerCulling = cfg.getBoolean(
+                "playerCulling", "player", playerCulling,
+                "Client-side player visibility optimization. Disabled by default."
+        );
+        playerNameOpacityEnabled = cfg.getBoolean(
+                "playerNameOpacityEnabled", "player", playerNameOpacityEnabled,
+                "Enables configurable player name tag opacity."
+        );
 
         entityDistance = cfg.getInt(
                 "entityDistance", "render", entityDistance, 8, 640,
@@ -77,6 +89,14 @@ public final class AOCConfig {
         effectDistance = cfg.getInt(
                 "effectDistance", "render", effectDistance, 8, 160,
                 "Maximum AOC client-side visual-effect visibility range."
+        );
+        playerDistance = cfg.getInt(
+                "playerDistance", "player", playerDistance, 8, 640,
+                "Maximum AOC client-side player visibility range."
+        );
+        playerNameOpacity = cfg.getFloat(
+                "playerNameOpacity", "player", playerNameOpacity, 0.0F, 1.0F,
+                "Player name tag opacity. 1.0 is vanilla/default opacity."
         );
         occlusionBudget = cfg.getInt(
                 "occlusionBudget", "render", occlusionBudget, 0, 64,
@@ -139,12 +159,16 @@ public final class AOCConfig {
         cfg.get("render", "occlusionCulling", occlusionCulling).set(occlusionCulling);
         cfg.get("render", "particleCulling", particleCulling).set(particleCulling);
         cfg.get("render", "effectCulling", effectCulling).set(effectCulling);
+        cfg.get("player", "playerCulling", playerCulling).set(playerCulling);
+        cfg.get("player", "playerNameOpacityEnabled", playerNameOpacityEnabled).set(playerNameOpacityEnabled);
 
         cfg.get("render", "entityDistance", entityDistance).set(entityDistance);
         cfg.get("render", "itemDistance", itemDistance).set(itemDistance);
         cfg.get("render", "tileEntityDistance", tileEntityDistance).set(tileEntityDistance);
         cfg.get("render", "particleDistance", particleDistance).set(particleDistance);
         cfg.get("render", "effectDistance", effectDistance).set(effectDistance);
+        cfg.get("player", "playerDistance", playerDistance).set(playerDistance);
+        cfg.get("player", "playerNameOpacity", playerNameOpacity).set(playerNameOpacity);
         cfg.get("render", "occlusionBudget", occlusionBudget).set(occlusionBudget);
 
         applyToRuntime();
