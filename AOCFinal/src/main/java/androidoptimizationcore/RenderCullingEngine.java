@@ -59,6 +59,8 @@ public final class RenderCullingEngine {
 
     private static boolean loggedEntityCull;
     private static boolean loggedTileCull;
+    private static final ThreadLocal<Boolean> PLAYER_NAME_RENDER =
+            new ThreadLocal<Boolean>();
 
     private RenderCullingEngine() {}
 
@@ -211,9 +213,14 @@ public final class RenderCullingEngine {
         }
     }
 
-    /** Returns whether the configurable player name opacity should be applied. */
-    public static boolean isPlayerNameOpacityEnabled() {
-        return AOCConfig.playerNameOpacityEnabled;
+    /** Marks the narrow RenderPlayer name-tag rendering scope. */
+    public static void beginPlayerNameRender() {
+        PLAYER_NAME_RENDER.set(Boolean.valueOf(AOCConfig.playerNameOpacityEnabled));
+    }
+
+    /** Clears the player name-tag rendering scope even if the option is disabled. */
+    public static void endPlayerNameRender() {
+        PLAYER_NAME_RENDER.remove();
     }
 
     /**
@@ -222,7 +229,10 @@ public final class RenderCullingEngine {
      */
     public static int adjustPlayerNameColor(int color) {
         try {
-            if (!AOCConfig.playerNameOpacityEnabled) return color;
+            if (!AOCConfig.playerNameOpacityEnabled
+                    || !Boolean.TRUE.equals(PLAYER_NAME_RENDER.get())) {
+                return color;
+            }
             int alpha = Math.max(0, Math.min(255,
                     Math.round(AOCConfig.playerNameOpacity * 255.0F)));
             return (color & 0x00FFFFFF) | (alpha << 24);
