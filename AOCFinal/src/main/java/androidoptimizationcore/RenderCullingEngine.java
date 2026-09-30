@@ -227,17 +227,45 @@ public final class RenderCullingEngine {
      * Changes the alpha component of the vanilla packed text color only while
      * a player name tag is being rendered. Vanilla opacity is 1.0F.
      */
+    /**
+     * Scales the alpha already supplied by vanilla. This is important because
+     * Minecraft uses a semi-transparent packed color for the name-tag backdrop.
+     * At 100% the original vanilla alpha is preserved exactly.
+     */
     public static int adjustPlayerNameColor(int color) {
         try {
             if (!AOCConfig.playerNameOpacityEnabled
                     || !Boolean.TRUE.equals(PLAYER_NAME_RENDER.get())) {
                 return color;
             }
+
+            float opacity = Math.max(0.0F,
+                    Math.min(1.0F, AOCConfig.playerNameOpacity));
+
+            if (opacity >= 1.0F) {
+                return color;
+            }
+
+            int baseAlpha = (color >>> 24) & 0xFF;
             int alpha = Math.max(0, Math.min(255,
-                    Math.round(AOCConfig.playerNameOpacity * 255.0F)));
+                    Math.round(baseAlpha * opacity)));
+
             return (color & 0x00FFFFFF) | (alpha << 24);
         } catch (Throwable ignored) {
             return color;
+        }
+    }
+
+    /**
+     * Hides the player name tag only when the dedicated opacity setting is
+     * enabled and configured to 0%. Fail-open on any unexpected error.
+     */
+    public static boolean shouldHidePlayerName() {
+        try {
+            return AOCConfig.playerNameOpacityEnabled
+                    && AOCConfig.playerNameOpacity <= 0.0F;
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
