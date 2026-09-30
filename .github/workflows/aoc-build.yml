@@ -40,7 +40,7 @@ jobs:
       - name: Upload source ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidOptimizationCore-1.4.0-source
+          name: AdvancedOptimizationCore-1.4.1-source
           path: AOCFinal/AOCFinal-source.zip
 
       - name: Build
@@ -60,7 +60,7 @@ jobs:
       - name: Upload JAR artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AndroidOptimizationCore-1.4.0
+          name: AdvancedOptimizationCore-1.4.1
           path: AOCFinal/build/libs/*.jar
 
       - name: Publish JAR to repository
@@ -72,7 +72,7 @@ jobs:
           git rebase origin/main
           mkdir -p releases
           JAR="$(find AOCFinal/build/libs -maxdepth 1 -type f -name '*.jar' | head -n 1)"
-          cp "$JAR" releases/AndroidOptimizationCore-1.4.0.jar
-          git add releases/AndroidOptimizationCore-1.4.0.jar
-          git diff --cached --quiet || git commit -m "Publish AndroidOptimizationCore 1.4.0 JAR"
+          cp "$JAR" releases/AdvancedOptimizationCore-1.4.1.jar
+          git add releases/AdvancedOptimizationCore-1.4.1.jar
+          git diff --cached --quiet || git commit -m "Publish AdvancedOptimizationCore 1.4.1 JAR"
           git push origin HEAD:main
