@@ -93,9 +93,12 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
                 0.0D, 64.0D, AOCConfig.occlusionBudget,
                 false, true, this));
 
-        buttonList.add(new GuiButton(8, left, y + step * 6, bw, bh,
+        buttonList.add(new GuiButton(7, width / 2 - bw / 2, y + step * 6, bw, bh,
+                tr("key.aoc.players")));
+
+        buttonList.add(new GuiButton(8, left, y + step * 7, bw, bh,
                 tr("key.aoc.reset")));
-        buttonList.add(new GuiButton(9, right, y + step * 6, bw, bh,
+        buttonList.add(new GuiButton(9, right, y + step * 7, bw, bh,
                 tr("key.aoc.done")));
     }
 
@@ -125,6 +128,9 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             case 6:
                 AOCConfig.occlusionCulling = !AOCConfig.occlusionCulling;
                 break;
+            case 7:
+                mc.displayGuiScreen(new AOCPlayerGui(this));
+                return;
             case 8:
                 AOCConfig.resetDefaults();
                 break;
@@ -183,6 +189,9 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             if ("key.aoc.title".equals(key)) return "Android Optimization Core";
             if ("key.aoc.subtitle".equals(key)) return "Otimização independente de renderização no cliente para Forge 1.12.2";
             if ("key.aoc.done".equals(key)) return "Concluído";
+            if ("key.aoc.players".equals(key)) return "Configurar Players";
+            if ("key.aoc.tooltip.players".equals(key)) return "Abre as configurações exclusivas de renderização dos players.";
+
             if ("key.aoc.reset".equals(key)) return "Restaurar Padrões";
             if ("key.aoc.entity".equals(key)) return "Culling de Entidades";
             if ("key.aoc.item".equals(key)) return "Itens Dropados";
@@ -223,6 +232,9 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             if ("key.aoc.title".equals(key)) return "Android Optimization Core";
             if ("key.aoc.subtitle".equals(key)) return "Independent client-side rendering optimization for Forge 1.12.2";
             if ("key.aoc.done".equals(key)) return "Done";
+            if ("key.aoc.players".equals(key)) return "Player Settings";
+            if ("key.aoc.tooltip.players".equals(key)) return "Opens the player-only rendering settings.");
+
             if ("key.aoc.reset".equals(key)) return "Reset Defaults";
             if ("key.aoc.entity".equals(key)) return "Entity Culling";
             if ("key.aoc.item".equals(key)) return "Dropped Items";
@@ -341,6 +353,11 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             case 6:
                 tooltip.add(button.displayString);
                 tooltip.addAll(fontRenderer.listFormattedStringToWidth(tr("key.aoc.tooltip.occlusion"), 260));
+                return;
+            case 7:
+                tooltip.add(button.displayString);
+                tooltip.addAll(fontRenderer.listFormattedStringToWidth(
+                        tr("key.aoc.tooltip.players"), 260));
                 return;
             case 8:
                 tooltip.add(button.displayString);
