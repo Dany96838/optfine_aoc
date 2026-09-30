@@ -73,11 +73,21 @@ public final class AOCTransformer implements IClassTransformer {
             return bytes;
         }
 
-        if (!containsHook(target, "shouldCullEntity")) {
-            insertEntityShouldRenderHook(target);
-        }
+        /*
+         * ORDER MATTERS.
+         *
+         * The vanilla IRETURNs of shouldRender() must be wrapped before AOC's
+         * own early return is prepended. Inserting the cull hook first puts
+         * its `ICONST_0; IRETURN` at the head of the method, and the wrapper
+         * then lands on THAT return - which turns every cancelled occlusion
+         * into "render anyway" (the wrapper calls the AOC distance test, which
+         * is true for any entity inside the AOC range and inside the frustum).
+         */
         if (!containsHook(target, "shouldAllowEntityWithinAocDistance")) {
             wrapEntityReturnForAocDistance(target);
+        }
+        if (!containsHook(target, "shouldCullEntity")) {
+            insertEntityShouldRenderHook(target);
         }
 
         if (!loggedEntityHook) {
@@ -284,15 +294,31 @@ public final class AOCTransformer implements IClassTransformer {
     }
 
     private static void patchTileDistanceLimit(MethodNode m) {
+        Type[] methodArgs = Type.getArgumentTypes(m.desc);
+        if (methodArgs.length == 0 || methodArgs[0].getSort() != Type.OBJECT) {
+            return;
+        }
+
+        String tileEntityDesc = methodArgs[0].getDescriptor();
+        boolean tileEntityIsLocal1 = methodArgs[0].getSize() == 1;
+
         for (AbstractInsnNode insn = m.instructions.getFirst();
              insn != null;
              insn = insn.getNext()) {
             if (!(insn instanceof MethodInsnNode)) continue;
 
             MethodInsnNode call = (MethodInsnNode) insn;
-            if (!"getMaxRenderDistanceSquared".equals(call.name)
-                    || Type.getReturnType(call.desc).getSort() != Type.DOUBLE
-                    || Type.getArgumentTypes(call.desc).length != 0) {
+
+            if (Type.getReturnType(call.desc).getSort() != Type.DOUBLE) continue;
+            if (Type.getArgumentTypes(call.desc).length != 0) continue;
+
+            if (!tileEntityDesc.equals("L" + call.owner + ";")) continue;
+
+            if (!tileEntityIsLocal1) continue;
+            AbstractInsnNode prev = previousReal(insn);
+            if (!(prev instanceof VarInsnNode)
+                    || prev.getOpcode() != Opcodes.ALOAD
+                    || ((VarInsnNode) prev).var != 1) {
                 continue;
             }
 
@@ -303,6 +329,17 @@ public final class AOCTransformer implements IClassTransformer {
             call.itf = false;
             return;
         }
+    }
+
+    private static AbstractInsnNode previousReal(AbstractInsnNode insn) {
+        AbstractInsnNode prev = insn.getPrevious();
+        while (prev != null
+                && (prev instanceof LabelNode
+                    || prev instanceof LineNumberNode
+                    || prev instanceof FrameNode)) {
+            prev = prev.getPrevious();
+        }
+        return prev;
     }
 
     private static boolean isTileRenderShape(String desc) {
