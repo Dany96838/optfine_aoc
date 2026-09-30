@@ -233,7 +233,7 @@ public final class AOCGui extends GuiScreen implements GuiSlider.ISlider {
             if ("key.aoc.subtitle".equals(key)) return "Independent client-side rendering optimization for Forge 1.12.2";
             if ("key.aoc.done".equals(key)) return "Done";
             if ("key.aoc.players".equals(key)) return "Player Settings";
-            if ("key.aoc.tooltip.players".equals(key)) return "Opens the player-only rendering settings.");
+            if ("key.aoc.tooltip.players".equals(key)) return "Opens the player-only rendering settings.";
 
             if ("key.aoc.reset".equals(key)) return "Reset Defaults";
             if ("key.aoc.entity".equals(key)) return "Entity Culling";
