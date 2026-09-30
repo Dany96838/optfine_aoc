@@ -696,14 +696,14 @@ public final class AOCTransformer implements IClassTransformer {
             if (containsHook(m, "adjustPlayerNameColor")) continue;
 
             InsnList hook = new InsnList();
-            hook.add(new VarInsnNode(Opcodes.ILOAD, 3));
+            hook.add(new VarInsnNode(Opcodes.ILOAD, 4));
             hook.add(new MethodInsnNode(
                     Opcodes.INVOKESTATIC,
                     CULL_ENGINE,
                     "adjustPlayerNameColor",
                     "(I)I",
                     false));
-            hook.add(new VarInsnNode(Opcodes.ISTORE, 3));
+            hook.add(new VarInsnNode(Opcodes.ISTORE, 4));
             m.instructions.insert(hook);
             patched++;
         }
