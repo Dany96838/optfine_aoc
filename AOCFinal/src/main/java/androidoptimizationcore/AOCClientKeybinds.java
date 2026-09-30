@@ -9,9 +9,9 @@ import org.lwjgl.input.Keyboard;
  */
 public final class AOCClientKeybinds {
     public static final KeyBinding OPEN_MENU = new KeyBinding(
-            "Android Optimization Core",
+            "Advanced Optimization Core",
             Keyboard.KEY_F4,
-            "Android Optimization Core"
+            "Advanced Optimization Core"
     );
 
     private AOCClientKeybinds() {}
