@@ -257,8 +257,7 @@ public final class RenderCullingEngine {
              *
              * For this first reliable particle implementation we use only
              * distance. Camera/frustum rejection is deliberately omitted so
-             * that turning the camera away cannot make a particle appear to
-             * have been removed. The particle keeps updating normally and is
+             * that turning the camera away cannot make a particle appear to             * have been removed. The particle keeps updating normally and is
              * rendered again as soon as it is inside the configured range.
              */
             Entity camera = mc.getRenderViewEntity();
@@ -284,6 +283,14 @@ public final class RenderCullingEngine {
      * enabled. A custom TileEntity renderer may provide a larger vanilla
      * range; that larger value is always preserved.
      */
+    /**
+     * Returns the TileEntity render-distance limit used by the dispatcher.
+     *
+     * AOC keeps the vanilla/custom renderer limit as a lower bound so a mod
+     * with a deliberately larger range is still allowed to reach the AOC
+     * distance hook. The actual configured maximum is enforced by
+     * shouldCullTileEntity(), which runs before the renderer call.
+     */
     public static double getTileEntityMaxRenderDistanceSquared(
             TileEntity tileEntity) {
         try {
@@ -302,6 +309,54 @@ public final class RenderCullingEngine {
         }
     }
 
+    /**
+     * TileEntity rendering category is discovered from the actual runtime
+     * renderer, never from a block ID, registry name or mod ID.
+     *
+     * NORMAL_TESR  = ordinary TileEntitySpecialRenderer
+     * FAST_TESR    = TileEntity reports that it uses the batched FastTESR path
+     * GLOBAL_TESR  = renderer declares itself global
+     * NO_RENDERER  = no registered special renderer; fail open for compatibility
+     */
+    private enum TileEntityRenderCategory {
+        NORMAL_TESR,
+        FAST_TESR,
+        GLOBAL_TESR,
+        NO_RENDERER
+    }
+
+    private static TileEntityRenderCategory getTileEntityRenderCategory(
+            TileEntity tileEntity,
+            TileEntitySpecialRenderer renderer) {
+        if (tileEntity == null) return TileEntityRenderCategory.NO_RENDERER;
+
+        try {
+            if (renderer != null && renderer.isGlobalRenderer(tileEntity)) {
+                return TileEntityRenderCategory.GLOBAL_TESR;
+            }
+
+            if (tileEntity.hasFastRenderer()) {
+                return TileEntityRenderCategory.FAST_TESR;
+            }
+
+            if (renderer != null) {
+                return TileEntityRenderCategory.NORMAL_TESR;
+            }
+        } catch (Throwable ignored) {
+            // Unknown/custom renderer behavior: keep the TileEntity visible.
+        }
+
+        return TileEntityRenderCategory.NO_RENDERER;
+    }
+
+    /**
+     * Cheap TileEntity distance gate shared by all renderer categories.
+     *
+     * The category decides which rendering path the TE belongs to, but the
+     * user-facing TileEntity Distance remains one setting. This is deliberate:
+     * modded TileEntities are classified by their real renderer path rather
+     * than by hard-coded vanilla classes, so the same code works with mods.
+     */
     public static boolean shouldCullTileEntity(TileEntity tileEntity) {
         try {
             if (!AOCConfig.tileEntityCulling || tileEntity == null) return false;
@@ -314,13 +369,28 @@ public final class RenderCullingEngine {
 
             TileEntitySpecialRenderer renderer =
                     TileEntityRendererDispatcher.instance.getRenderer(tileEntity);
-            if (renderer != null && renderer.isGlobalRenderer(tileEntity)) {
+            TileEntityRenderCategory category =
+                    getTileEntityRenderCategory(tileEntity, renderer);
+
+            // A TileEntity without a TESR is not ours to hide here. Its block
+            // model is rendered by the chunk pipeline, so failing open avoids
+            // changing normal block rendering for custom mods.
+            if (category == TileEntityRenderCategory.NO_RENDERER) {
                 return false;
             }
 
             AxisAlignedBB box = tileEntity.getRenderBoundingBox();
             if (box == null) box = new AxisAlignedBB(pos);
-            if (box.hasNaN() || box == TileEntity.INFINITE_EXTENT_AABB) return false;
+
+            // Infinite/global renderers intentionally stay fail-open. They can
+            // represent effects whose visible geometry extends far beyond the
+            // TileEntity position (for example beams). Finite global renderers
+            // still use the same configured distance below.
+            if (box.hasNaN()) return false;
+            if (box == TileEntity.INFINITE_EXTENT_AABB) {
+                if (category == TileEntityRenderCategory.GLOBAL_TESR) return false;
+                return false;
+            }
 
             if (box.maxX - box.minX > 64.0D
                     || box.maxY - box.minY > 64.0D
@@ -333,6 +403,9 @@ public final class RenderCullingEngine {
             double dz = pos.getZ() + 0.5D - camZ;
             double distance = AOCConfig.tileEntityDistance;
 
+            // This is the primary TileEntity Distance gate. It is performed
+            // before any expensive occlusion work and therefore works equally
+            // for normal TESR, FastTESR and compatible modded renderers.
             if (dx * dx + dy * dy + dz * dz > distance * distance) {
                 return true;
             }
@@ -350,6 +423,7 @@ public final class RenderCullingEngine {
                     camY,
                     camZ);
         } catch (Throwable ignored) {
+            // Any unexpected mod renderer behavior must never break rendering.
             return false;
         }
     }
@@ -517,8 +591,7 @@ public final class RenderCullingEngine {
         if (task == null || task.key == null) return false;
 
         if (task.key instanceof Entity) {
-            return ENTITY_PENDING.get((Entity) task.key) == task;
-        }
+            return ENTITY_PENDING.get((Entity) task.key) == task;        }
 
         if (task.key instanceof BlockPos) {
             return TILE_PENDING.get((BlockPos) task.key) == task;
