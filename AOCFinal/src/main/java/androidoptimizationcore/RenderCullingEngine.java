@@ -111,8 +111,12 @@ public final class RenderCullingEngine {
 
             if (entity == mc.getRenderViewEntity()) return false;
 
+            boolean player = entity instanceof EntityPlayer;
             boolean droppedItem = entity instanceof EntityItem;
-            if (droppedItem) {
+
+            if (player) {
+                if (!AOCConfig.playerCulling) return false;
+            } else if (droppedItem) {
                 if (!AOCConfig.itemCulling) return false;
             } else if (!AOCConfig.entityCulling) {
                 return false;
@@ -126,8 +130,9 @@ public final class RenderCullingEngine {
                 return false;
             }
 
-            double distance = droppedItem
-                    ? AOCConfig.itemDistance : AOCConfig.entityDistance;
+            double distance = player
+                    ? AOCConfig.playerDistance
+                    : (droppedItem ? AOCConfig.itemDistance : AOCConfig.entityDistance);
             double dx = entity.posX - renderCamX;
             double dy = entity.posY - renderCamY;
             double dz = entity.posZ - renderCamZ;
@@ -174,8 +179,12 @@ public final class RenderCullingEngine {
              * Vanilla's Render.shouldRender() result; it never changes player
              * simulation or state.
              */
+            boolean player = entity instanceof EntityPlayer;
             boolean droppedItem = entity instanceof EntityItem;
-            if (droppedItem) {
+
+            if (player) {
+                if (!AOCConfig.playerCulling) return false;
+            } else if (droppedItem) {
                 if (!AOCConfig.itemCulling) return false;
             } else if (!AOCConfig.entityCulling) {
                 return false;
@@ -189,8 +198,9 @@ public final class RenderCullingEngine {
                 return false;
             }
 
-            double distance = droppedItem
-                    ? AOCConfig.itemDistance : AOCConfig.entityDistance;
+            double distance = player
+                    ? AOCConfig.playerDistance
+                    : (droppedItem ? AOCConfig.itemDistance : AOCConfig.entityDistance);
             double dx = entity.posX - renderCamX;
             double dy = entity.posY - renderCamY;
             double dz = entity.posZ - renderCamZ;
@@ -198,6 +208,26 @@ public final class RenderCullingEngine {
             return dx * dx + dy * dy + dz * dz <= distance * distance;
         } catch (Throwable ignored) {
             return false;
+        }
+    }
+
+    /** Returns whether the configurable player name opacity should be applied. */
+    public static boolean isPlayerNameOpacityEnabled() {
+        return AOCConfig.playerNameOpacityEnabled;
+    }
+
+    /**
+     * Changes the alpha component of the vanilla packed text color only while
+     * a player name tag is being rendered. Vanilla opacity is 1.0F.
+     */
+    public static int adjustPlayerNameColor(int color) {
+        try {
+            if (!AOCConfig.playerNameOpacityEnabled) return color;
+            int alpha = Math.max(0, Math.min(255,
+                    Math.round(AOCConfig.playerNameOpacity * 255.0F)));
+            return (color & 0x00FFFFFF) | (alpha << 24);
+        } catch (Throwable ignored) {
+            return color;
         }
     }
 
