@@ -104,6 +104,31 @@ public final class AOCTransformer implements IClassTransformer {
         return write(cn);
     }
 
+    /*
+     * ------------------------------------------------------------------
+     * ParticleManager: APENAS portao de render. Nada de remocao.
+     * ------------------------------------------------------------------
+     *
+     * Este patcher instala shouldCullParticle em EXATAMENTE dois metodos, e
+     * somente em volta da unica chamada de desenho de cada um:
+     *
+     *   renderParticles(Entity, float)      -> loop de c[a][b], um draw
+     *   renderLitParticles(Entity, float)   -> loop de c[a][b], um draw
+     *
+     * Nada mais e tocado:
+     *   - as listas c[a][b] nunca sao alteradas nem lidas aqui;
+     *   - addEffect / a(int, Particle) / a(Particle) / a(Queue) / b(Particle)
+     *     nao sao patchados: spawn continua identico;
+     *   - updateEffects / updateEffectLayer e o tick de Particle nao sao
+     *     patchados: movimento, gravidade, lifetime e animacao continuam
+     *     identicos;
+     *   - nenhum campo e nenhum caminho de remocao (removeAll/removeFirst)
+     *     e tocado.
+     *
+     * Um "true" aqui significa apenas "nao emita o draw call deste frame".
+     * A particula continua existindo, continua atualizando e volta a ser
+     * desenhada assim que entrar em distancia e ficar a frente da camera.
+     */
     private byte[] patchParticleManager(byte[] bytes) {
         ClassNode cn = read(bytes);
         int patched = 0;
@@ -128,119 +153,6 @@ public final class AOCTransformer implements IClassTransformer {
         }
 
         return write(cn);
-    }
-
-    /**
-     * RenderGlobal is the authoritative caller for the normal TileEntity list
-     * in Forge 1.12.2. It invokes TileEntityRendererDispatcher.render(te,
-     * partialTicks, destroyStage). Hooking this call site guarantees that a
-     * confirmed AOC result prevents the dispatcher from being entered,
-     * including the FastTESR/batched path.
-     */
-    private byte[] patchRenderGlobalTileCalls(byte[] bytes) {
-        ClassNode cn = read(bytes);
-        int patched = 0;
-
-        for (MethodNode m : cn.methods) {
-            patched += patchTileDispatcherCalls(m);
-        }
-
-        if (patched == 0) {
-            if (!loggedRenderGlobalTileMiss) {
-                loggedRenderGlobalTileMiss = true;
-                System.out.println("[AOC] WARNING: RenderGlobal TileEntity dispatcher calls were not found.");
-            }
-            return bytes;
-        }
-
-        if (!loggedRenderGlobalTileHook) {
-            loggedRenderGlobalTileHook = true;
-            System.out.println("[AOC] PATCHED RenderGlobal TileEntity dispatcher calls: " + patched);
-        }
-
-        return write(cn);
-    }
-
-    private static int patchTileDispatcherCalls(MethodNode method) {
-        int patched = 0;
-        int nextLocal = method.maxLocals;
-
-        for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; ) {
-            AbstractInsnNode next = insn.getNext();
-
-            if (!(insn instanceof MethodInsnNode)) {
-                insn = next;
-                continue;
-            }
-
-            MethodInsnNode call = (MethodInsnNode) insn;
-            if (!isTileDispatcherRenderCall(call)) {
-                insn = next;
-                continue;
-            }
-
-            int receiverLocal = nextLocal++;
-            int tileLocal = nextLocal++;
-            int partialLocal = nextLocal++;
-            int destroyLocal = nextLocal++;
-
-            LabelNode render = new LabelNode();
-            LabelNode skip = new LabelNode();
-            InsnList patch = new InsnList();
-
-            // Stack immediately before the vanilla call:
-            // dispatcher, TileEntity, partialTicks, destroyStage.
-            patch.add(new VarInsnNode(Opcodes.ISTORE, destroyLocal));
-            patch.add(new VarInsnNode(Opcodes.FSTORE, partialLocal));
-            patch.add(new VarInsnNode(Opcodes.ASTORE, tileLocal));
-            patch.add(new VarInsnNode(Opcodes.ASTORE, receiverLocal));
-
-            patch.add(new VarInsnNode(Opcodes.ALOAD, tileLocal));
-            patch.add(new MethodInsnNode(
-                    Opcodes.INVOKESTATIC,
-                    CULL_ENGINE,
-                    "shouldCullTileEntity",
-                    "(Lnet/minecraft/tileentity/TileEntity;)Z",
-                    false
-            ));
-            patch.add(new JumpInsnNode(Opcodes.IFEQ, render));
-            patch.add(new JumpInsnNode(Opcodes.GOTO, skip));
-
-            patch.add(render);
-            patch.add(new VarInsnNode(Opcodes.ALOAD, receiverLocal));
-            patch.add(new VarInsnNode(Opcodes.ALOAD, tileLocal));
-            patch.add(new VarInsnNode(Opcodes.FLOAD, partialLocal));
-            patch.add(new VarInsnNode(Opcodes.ILOAD, destroyLocal));
-            patch.add(new MethodInsnNode(
-                    call.getOpcode(), call.owner, call.name, call.desc, call.itf));
-            patch.add(skip);
-
-            method.instructions.insertBefore(insn, patch);
-            method.instructions.remove(insn);
-            patched++;
-            insn = next;
-        }
-
-        method.maxLocals = Math.max(method.maxLocals, nextLocal);
-        return patched;
-    }
-
-    private static boolean isTileDispatcherRenderCall(MethodInsnNode call) {
-        if (Type.getReturnType(call.desc).getSort() != Type.VOID) return false;
-
-        Type[] args;
-        try {
-            args = Type.getArgumentTypes(call.desc);
-        } catch (Throwable ignored) {
-            return false;
-        }
-
-        // In production the dispatcher owner is obfuscated, so the stable
-        // 1.12.2 call shape is used instead of a hard-coded owner name.
-        return args.length == 3
-                && args[0].getSort() == Type.OBJECT
-                && args[1].getSort() == Type.FLOAT
-                && args[2].getSort() == Type.INT;
     }
 
     private byte[] patchTileDispatcher(byte[] bytes) {
@@ -412,12 +324,31 @@ public final class AOCTransformer implements IClassTransformer {
                 && args[2].getSort() == Type.INT;
     }
 
+    /*
+     * Rewrites the dispatcher's per-tileEntity range test
+     *
+     *     te.getDistanceSq(px, py, pz) < te.getMaxRenderDistanceSquared()
+     *
+     * so the right-hand side is served by AOC instead of the vanilla value.
+     *
+     * The callee CANNOT be matched by name. In production the dispatcher is
+     * obfuscated and that call is `t()`, so a name comparison against
+     * "getMaxRenderDistanceSquared" never fires and the patch silently does
+     * nothing. Match by shape instead: a no-argument instance call that
+     * returns a double, made on the TileEntity the dispatcher was handed -
+     * which is this method's first (here: only object) parameter. The
+     * immediately preceding real instruction has to be an ALOAD of that
+     * parameter, which pins the receiver exactly and rules out any other
+     * no-arg double-returning call in the method body.
+     */
     private static void patchTileDistanceLimit(MethodNode m) {
         Type[] methodArgs = Type.getArgumentTypes(m.desc);
         if (methodArgs.length == 0 || methodArgs[0].getSort() != Type.OBJECT) {
             return;
         }
 
+        // Descriptor of the TileEntity argument, e.g. "Lavj;" obfuscated or
+        // "Lnet/minecraft/tileentity/TileEntity;" in a deobfuscated runtime.
         String tileEntityDesc = methodArgs[0].getDescriptor();
         boolean tileEntityIsLocal1 = methodArgs[0].getSize() == 1;
 
@@ -428,11 +359,15 @@ public final class AOCTransformer implements IClassTransformer {
 
             MethodInsnNode call = (MethodInsnNode) insn;
 
+            // no-argument call returning double
             if (Type.getReturnType(call.desc).getSort() != Type.DOUBLE) continue;
             if (Type.getArgumentTypes(call.desc).length != 0) continue;
 
+            // receiver must be the TileEntity parameter itself
             if (!tileEntityDesc.equals("L" + call.owner + ";")) continue;
 
+            // and it must be loaded straight onto the stack for this call,
+            // so we never touch an unrelated same-typed local
             if (!tileEntityIsLocal1) continue;
             AbstractInsnNode prev = previousReal(insn);
             if (!(prev instanceof VarInsnNode)
@@ -470,19 +405,51 @@ public final class AOCTransformer implements IClassTransformer {
         }
 
         if (Type.getReturnType(desc).getSort() != Type.VOID) return false;
-        if (args.length < 3 || args.length > 7) return false;
-        if (args[0].getSort() != Type.OBJECT) return false;
+        if (args.length == 0 || args[0].getSort() != Type.OBJECT) return false;
 
-        // Render overload parameters after TileEntity are numeric: doubles,
-        // floats and, for destroy-stage rendering, an int.
-        for (int i = 1; i < args.length; i++) {
-            int sort = args[i].getSort();
-            if (sort != Type.DOUBLE && sort != Type.FLOAT && sort != Type.INT) {
-                return false;
-            }
+        /*
+         * Forge 1.12.2 TileEntityRendererDispatcher render overloads that
+         * actually receive a TileEntity are limited to these signatures:
+         *
+         *   (TileEntity, float, int) -> void
+         *   (TileEntity, double, double, double, float) -> void
+         *   (TileEntity, double, double, double, float, float) -> void
+         *   (TileEntity, double, double, double, float, int, float) -> void
+         *
+         * Match the exact primitive layout instead of accepting arbitrary
+         * Object + numeric methods. This prevents the transformer from
+         * accidentally inserting a RETURN into an unrelated dispatcher method.
+         */
+        if (args.length == 3) {
+            return args[1].getSort() == Type.FLOAT
+                    && args[2].getSort() == Type.INT;
         }
 
-        return true;
+        if (args.length == 5) {
+            return args[1].getSort() == Type.DOUBLE
+                    && args[2].getSort() == Type.DOUBLE
+                    && args[3].getSort() == Type.DOUBLE
+                    && args[4].getSort() == Type.FLOAT;
+        }
+
+        if (args.length == 6) {
+            return args[1].getSort() == Type.DOUBLE
+                    && args[2].getSort() == Type.DOUBLE
+                    && args[3].getSort() == Type.DOUBLE
+                    && args[4].getSort() == Type.FLOAT
+                    && args[5].getSort() == Type.FLOAT;
+        }
+
+        if (args.length == 7) {
+            return args[1].getSort() == Type.DOUBLE
+                    && args[2].getSort() == Type.DOUBLE
+                    && args[3].getSort() == Type.DOUBLE
+                    && args[4].getSort() == Type.FLOAT
+                    && args[5].getSort() == Type.INT
+                    && args[6].getSort() == Type.FLOAT;
+        }
+
+        return false;
     }
 
     private static boolean containsHook(MethodNode method, String methodName) {
@@ -609,6 +576,185 @@ public final class AOCTransformer implements IClassTransformer {
         hook.add(pass);
 
         m.instructions.insert(hook);
+    }
+
+    /*
+     * ------------------------------------------------------------------
+     * RenderGlobal: os 3 pontos onde um TileEntity entra no pipeline
+     * ------------------------------------------------------------------
+     *
+     * O RenderGlobal vanilla nao culla TileEntity por parede. Ele so manda
+     * o dispatcher desenhar o TE em tres lugares:
+     *
+     *   1) loop de field_72755_R (renderInfos)      -> TEs dentro do frustum
+     *   2) loop de field_181024_n (setTileEntities) -> TEs globais / fast
+     *   3) loop de breaking progress (field x)      -> TE em destruicao
+     *
+     * Nos tres, a pilha imediatamente antes do invokevirtual e sempre:
+     *
+     *   [ dispatcher , TileEntity , float partialTicks , int destroyStage ]
+     *
+     * (destroyStage = -1 nos sites 1 e 2, e oh.c() no site 3.)
+     *
+     * Entao guardamos os operandos, chamamos shouldCullTileEntity(te) e, se
+     * ela mandar cullar, pulamos o invokevirtual inteiro. O TE continua
+     * existindo, atualizando e com o estado intacto - so nao e desenhado.
+     *
+     * NAO tocamos em preDrawBatch()/drawBatch(): se a chamada nao acontece,
+     * simplesmente nao existe entrada no batch, e o drawBatch final desenha
+     * o que sobrou. O batch nunca quebra.
+     */
+    private byte[] patchRenderGlobalTileCalls(byte[] bytes) {
+        ClassNode cn = read(bytes);
+        int patched = 0;
+
+        for (MethodNode m : cn.methods) {
+            patched += patchTileDispatcherCalls(m);
+        }
+
+        if (patched == 0) {
+            if (!loggedRenderGlobalTileMiss) {
+                loggedRenderGlobalTileMiss = true;
+                System.out.println("[AOC] WARNING: RenderGlobal TileEntity dispatcher calls were not found.");
+            }
+            return bytes;
+        }
+
+        if (!loggedRenderGlobalTileHook) {
+            loggedRenderGlobalTileHook = true;
+            System.out.println("[AOC] PATCHED RenderGlobal TileEntity dispatcher calls: " + patched);
+        }
+
+        // Se o write() explodir, e melhor devolver o RenderGlobal vanilla
+        // do que devolver um RenderGlobal meio remendado.
+        try {
+            return write(cn);
+        } catch (Throwable t) {
+            System.out.println("[AOC] WARNING: RenderGlobal rewrite failed (" + t
+                    + "), keeping vanilla RenderGlobal.");
+            return bytes;
+        }
+    }
+
+    private static int patchTileDispatcherCalls(MethodNode method) {
+        int patched = 0;
+        int nextLocal = method.maxLocals;
+        AbstractInsnNode insn = method.instructions.getFirst();
+
+        while (insn != null) {
+            AbstractInsnNode next = insn.getNext();
+
+            if (!(insn instanceof MethodInsnNode)) {
+                insn = next;
+                continue;
+            }
+
+            MethodInsnNode call = (MethodInsnNode) insn;
+            if (!isTileDispatcherRenderCall(call)) {
+                insn = next;
+                continue;
+            }
+
+            // Se o guard ja esta la (transformer rodando duas vezes no mesmo
+            // metodo), nao empilha um segundo.
+            if (alreadyGuarded(call)) {
+                insn = next;
+                continue;
+            }
+
+            int receiverLocal = nextLocal++;
+            int tileLocal = nextLocal++;
+            int partialLocal = nextLocal++;
+            int destroyLocal = nextLocal++;
+
+            LabelNode skip = new LabelNode();
+            InsnList patch = new InsnList();
+
+            // Desmonta a pilha: topo = destroyStage, depois partialTicks,
+            // depois o TE, depois o dispatcher.
+            patch.add(new VarInsnNode(Opcodes.ISTORE, destroyLocal));
+            patch.add(new VarInsnNode(Opcodes.FSTORE, partialLocal));
+            patch.add(new VarInsnNode(Opcodes.ASTORE, tileLocal));
+            patch.add(new VarInsnNode(Opcodes.ASTORE, receiverLocal));
+
+            patch.add(new VarInsnNode(Opcodes.ALOAD, tileLocal));
+            patch.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    CULL_ENGINE,
+                    "shouldCullTileEntity",
+                    "(Lnet/minecraft/tileentity/TileEntity;)Z",
+                    false
+            ));
+            // true -> nao desenha (pula a chamada original)
+            patch.add(new JumpInsnNode(Opcodes.IFNE, skip));
+
+            // Caminho normal: remonta a pilha na ordem original e faz a
+            // chamada vanilla exatamente como estava.
+            patch.add(new VarInsnNode(Opcodes.ALOAD, receiverLocal));
+            patch.add(new VarInsnNode(Opcodes.ALOAD, tileLocal));
+            patch.add(new VarInsnNode(Opcodes.FLOAD, partialLocal));
+            patch.add(new VarInsnNode(Opcodes.ILOAD, destroyLocal));
+            patch.add(new MethodInsnNode(call.getOpcode(), call.owner, call.name, call.desc, call.itf));
+
+            // Caminho cullado: nao desenha, nao remove, nao altera estado.
+            patch.add(skip);
+
+            method.instructions.insertBefore(insn, patch);
+            method.instructions.remove(insn);
+            patched++;
+            insn = next;
+        }
+
+        method.maxLocals = Math.max(method.maxLocals, nextLocal);
+        return patched;
+    }
+
+    /**
+     * Confere se a chamada ja tem um shouldCullTileEntity logo antes dela.
+     */
+    private static boolean alreadyGuarded(MethodInsnNode call) {
+        int seen = 0;
+        AbstractInsnNode prev = call.getPrevious();
+
+        while (prev != null && seen < 16) {
+            if (prev instanceof MethodInsnNode) {
+                MethodInsnNode mi = (MethodInsnNode) prev;
+                if (CULL_ENGINE.equals(mi.owner) && "shouldCullTileEntity".equals(mi.name)) {
+                    return true;
+                }
+            }
+            prev = prev.getPrevious();
+            seen++;
+        }
+
+        return false;
+    }
+
+    /**
+     * Reconhece exatamente o invokevirtual do dispatcher:
+     *
+     *   bwx.a : (Lavj;FI)V
+     *   TileEntityRendererDispatcher.render : (LTileEntity;FI)V
+     *
+     * Forma: void, 3 args, args[0] = object (TileEntity),
+     * args[1] = float (partialTicks), args[2] = int (destroyStage).
+     * Bate nos 3 sites do RenderGlobal.
+     */
+    private static boolean isTileDispatcherRenderCall(MethodInsnNode call) {
+        if (call == null) return false;
+        if (Type.getReturnType(call.desc).getSort() != Type.VOID) return false;
+
+        Type[] args;
+        try {
+            args = Type.getArgumentTypes(call.desc);
+        } catch (Throwable ignored) {
+            return false;
+        }
+
+        return args.length == 3
+                && args[0].getSort() == Type.OBJECT
+                && args[1].getSort() == Type.FLOAT
+                && args[2].getSort() == Type.INT;
     }
 
     private static ClassNode read(byte[] bytes) {
