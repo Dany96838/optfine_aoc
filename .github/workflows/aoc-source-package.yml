@@ -1,0 +1,21 @@
+name: AOC Source Package
+
+on:
+  push:
+    paths:
+      - '.github/workflows/aoc-source-package.yml'
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package current source
+        run: |
+          rm -rf AOCFinal/build AOCFinal/run
+          zip -r AOC-source-current-4f51bde8.zip AOCFinal LICENSE README.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AOC-source-current-4f51bde8
+          path: AOC-source-current-4f51bde8.zip
+          if-no-files-found: error
