@@ -143,6 +143,15 @@ public final class RenderCullingEngine {
                 return true;
             }
 
+            /*
+             * Players deliberately use distance/frustum only.
+             * Block occlusion belongs to the generic entity system, not the
+             * dedicated Player Optimization setting.
+             */
+            if (player) {
+                return false;
+            }
+
             if (!AOCConfig.occlusionCulling) return false;
 
             return requestOcclusion(
