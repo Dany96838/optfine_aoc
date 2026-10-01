@@ -386,21 +386,22 @@ public final class RenderCullingEngine {
      * distance hook. The actual configured maximum is enforced by
      * shouldCullTileEntity(), which runs before the renderer call.
      */
-    public static double getTileEntityMaxRenderDistanceSquared(
-            TileEntity tileEntity) {
+    public static double expandTileEntityRenderDistance(
+            TileEntity tileEntity, double vanillaDistanceSquared) {
         try {
             if (tileEntity == null || !AOCConfig.tileEntityCulling) {
-                return tileEntity == null
-                        ? 0.0D
-                        : tileEntity.getMaxRenderDistanceSquared();
+                return vanillaDistanceSquared;
             }
 
-            double vanilla = tileEntity.getMaxRenderDistanceSquared();
             double aoc = (double) AOCConfig.tileEntityDistance
                     * (double) AOCConfig.tileEntityDistance;
-            return Math.max(vanilla, aoc);
+
+            // Preserve the value produced by vanilla or another coremod
+            // (including RenderLib), while allowing AOC's configured range
+            // to extend the dispatcher gate when necessary.
+            return Math.max(vanillaDistanceSquared, aoc);
         } catch (Throwable ignored) {
-            return 4096.0D;
+            return vanillaDistanceSquared;
         }
     }
 
