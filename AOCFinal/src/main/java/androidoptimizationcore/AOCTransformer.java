@@ -373,10 +373,11 @@ public final class AOCTransformer implements IClassTransformer {
             return;
         }
 
-        // Descriptor of the TileEntity argument, e.g. "Lavj;" obfuscated or
-        // "Lnet/minecraft/tileentity/TileEntity;" in a deobfuscated runtime.
+        // The dispatcher receives the TileEntity as local 1. Keep the original
+        // getMaxRenderDistanceSquared() invocation completely intact because
+        // RenderLib redirects that exact call site with a Mixin.
         String tileEntityDesc = methodArgs[0].getDescriptor();
-        boolean tileEntityIsLocal1 = methodArgs[0].getSize() == 1;
+        if (methodArgs[0].getSize() != 1) return;
 
         for (AbstractInsnNode insn = m.instructions.getFirst();
              insn != null;
@@ -392,9 +393,6 @@ public final class AOCTransformer implements IClassTransformer {
             // receiver must be the TileEntity parameter itself
             if (!tileEntityDesc.equals("L" + call.owner + ";")) continue;
 
-            // and it must be loaded straight onto the stack for this call,
-            // so we never touch an unrelated same-typed local
-            if (!tileEntityIsLocal1) continue;
             AbstractInsnNode prev = previousReal(insn);
             if (!(prev instanceof VarInsnNode)
                     || prev.getOpcode() != Opcodes.ALOAD
@@ -402,11 +400,32 @@ public final class AOCTransformer implements IClassTransformer {
                 continue;
             }
 
-            call.setOpcode(Opcodes.INVOKESTATIC);
-            call.owner = CULL_ENGINE;
-            call.name = "getTileEntityMaxRenderDistanceSquared";
-            call.desc = "(Lnet/minecraft/tileentity/TileEntity;)D";
-            call.itf = false;
+            int tileLocal = m.maxLocals;
+            m.maxLocals = tileLocal + 1;
+
+            // Save the receiver before the original invocation. The original
+            // invoke instruction itself is deliberately NOT replaced.
+            InsnList before = new InsnList();
+            before.add(new VarInsnNode(Opcodes.ALOAD, 1));
+            before.add(new VarInsnNode(Opcodes.ASTORE, tileLocal));
+            m.instructions.insertBefore(insn, before);
+
+            // The original call leaves the vanilla/custom distance (double)
+            // on the stack. Add AOC's extension after it while preserving the
+            // exact call site that RenderLib needs to redirect.
+            InsnList after = new InsnList();
+            after.add(new VarInsnNode(Opcodes.ALOAD, tileLocal));
+            // Stack: [double, TileEntity] -> [TileEntity, double, TileEntity]
+            after.add(new InsnNode(Opcodes.DUP_X2));
+            after.add(new InsnNode(Opcodes.POP));
+            after.add(new MethodInsnNode(
+                    Opcodes.INVOKESTATIC,
+                    CULL_ENGINE,
+                    "expandTileEntityRenderDistance",
+                    "(Lnet/minecraft/tileentity/TileEntity;D)D",
+                    false
+            ));
+            m.instructions.insert(insn, after);
             return;
         }
     }
