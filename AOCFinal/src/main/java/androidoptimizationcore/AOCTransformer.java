@@ -704,9 +704,28 @@ public final class AOCTransformer implements IClassTransformer {
     private byte[] patchFontRenderer(byte[] bytes) {
         ClassNode cn = read(bytes);
         int patched = 0;
+
         for (MethodNode m : cn.methods) {
             if (!"(Ljava/lang/String;FFIZ)I".equals(m.desc)) continue;
             if (containsHook(m, "adjustPlayerNameColor")) continue;
+
+            /*
+             * FontRenderer.renderString() normalizes colors with alpha < 64
+             * to fully opaque before extracting red/green/blue/alpha:
+             *
+             *     if ((color & -67108864) == 0) color |= -16777216;
+             *
+             * Vanilla's through-wall player name uses alpha 0x20 (32), so
+             * changing that color BEFORE the normalization caused low
+             * opacity values to snap back to 100%. Inject only after the
+             * normalization/drop-shadow logic and immediately before the
+             * first float color field assignment.
+             */
+            AbstractInsnNode target = findFirstFloatFieldStore(m, cn.name);
+            if (target == null) {
+                System.out.println("[AOC] WARNING: FontRenderer.renderString color store was not found.");
+                continue;
+            }
 
             InsnList hook = new InsnList();
             hook.add(new VarInsnNode(Opcodes.ILOAD, 4));
@@ -717,12 +736,29 @@ public final class AOCTransformer implements IClassTransformer {
                     "(I)I",
                     false));
             hook.add(new VarInsnNode(Opcodes.ISTORE, 4));
-            m.instructions.insert(hook);
+            m.instructions.insertBefore(target, hook);
             patched++;
         }
+
         if (patched == 0) return bytes;
-        System.out.println("[AOC] PATCHED FontRenderer player-name color adjustment: " + patched);
+        System.out.println("[AOC] PATCHED FontRenderer player-name color adjustment after normalization: " + patched);
         return write(cn);
+    }
+
+    private static AbstractInsnNode findFirstFloatFieldStore(
+            MethodNode method, String owner) {
+        for (AbstractInsnNode insn = method.instructions.getFirst();
+             insn != null; insn = insn.getNext()) {
+            if (!(insn instanceof FieldInsnNode)) continue;
+
+            FieldInsnNode field = (FieldInsnNode) insn;
+            if (field.getOpcode() == Opcodes.PUTFIELD
+                    && owner.equals(field.owner)
+                    && "F".equals(field.desc)) {
+                return insn;
+            }
+        }
+        return null;
     }
 
     private byte[] patchRenderGlobalTileCalls(byte[] bytes) {
