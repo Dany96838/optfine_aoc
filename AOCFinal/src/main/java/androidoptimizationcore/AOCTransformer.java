@@ -175,11 +175,12 @@ public final class AOCTransformer implements IClassTransformer {
                 insertTileHook(m);
                 changed = true;
             }
-            if (isTileDistanceWrapperShape(m.desc)
-                    && !containsHook(m, "getTileEntityMaxRenderDistanceSquared")) {
-                patchTileDistanceLimit(m);
-                changed = true;
-            }
+            // Keep the original TileEntity.getMaxRenderDistanceSquared()
+            // call intact. RenderLib redirects that exact call; replacing it
+            // with AOC's static helper makes RenderLib's Mixin scan 0 targets.
+            // AOC still enforces its configured distance in shouldCullTileEntity().
+            // The vanilla/custom distance is intentionally left untouched here
+            // so other coremods can redirect the original call safely.
 
             if (changed) patched++;
         }
