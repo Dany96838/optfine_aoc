@@ -324,7 +324,14 @@ public final class AOCTransformer implements IClassTransformer {
             if (args[i].getSort() != Type.FLOAT) return false;
         }
 
-        return "renderParticle".equals(call.name) || "a".equals(call.name);
+        /*
+         * In Forge 1.12.2 the same method is exposed as renderParticle in
+         * MCP names, func_180434_a in SRG names, and a in fully obfuscated
+         * bytecode. The descriptor is the stable part, so do not require a
+         * particular method name here. This code is only reached from the
+         * two ParticleManager render methods above.
+         */
+        return true;
     }
 
     private static boolean isTileDistanceWrapperShape(String desc) {
