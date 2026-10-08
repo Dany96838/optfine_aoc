@@ -1,0 +1,31 @@
+--- shaders/deferred.fsh
++++ shaders/deferred.fsh
+@@
+- vec3 sunlightB = mix(pow(sunlight, vec3(1.0)) * 44.0, vec3(0.25,0.3,0.4), rainStrength * 0.8);
++ vec3 sunlightB = mix(sunlight * 44.0, vec3(0.25,0.3,0.4), rainStrength * 0.8);
+- if(isEyeInWater == 1.0)sunlightB = mix(pow(moonlight * 40.0, vec3(1.0)) * 44.0, vec3(0.25,0.3,0.4), rainStrength * 0.8);
++ if(isEyeInWater == 1.0)sunlightB = mix(moonlight * 40.0 * 44.0, vec3(0.25,0.3,0.4), rainStrength * 0.8);
+- vec3 moonlightC = mix(pow(moonlight * 20.0, vec3(1.0)) * 24.0, vec3(0.25, 0.3, 0.4), rainStrength * 0.8);
++ vec3 moonlightC = mix(moonlight * 20.0 * 24.0, vec3(0.25, 0.3, 0.4), rainStrength * 0.8);
+- sky = mix(sky, pow(skyColor * 0.75, vec3(3.2)), 1.0);
++ sky = pow(skyColor * 0.75, vec3(3.2));
+
+--- shaders/composite1.fsh
++++ shaders/composite1.fsh
+@@
+- vec3 VLcolor = mix(funLightcolor(false), vec3(0.0), 1.0-exp(-length(fragpos)/(0.2*far-near))) * VLrays;
+- if(isEyeInWater == 1.0) VLcolor = mix(vec3(0.05, 0.075, 0.110), vec3(0.0), 1.0-exp(-length(fragpos)/(0.2*far-near))) * VLrays;
++ float fragDistance = length(fragpos);
++ float VLfog = 1.0 - exp(-fragDistance / (0.2*far-near));
++ vec3 VLcolor = mix(funLightcolor(false), vec3(0.0), VLfog) * VLrays;
++ if(isEyeInWater == 1.0) VLcolor = mix(vec3(0.05, 0.075, 0.110), vec3(0.0), VLfog) * VLrays;
+@@
+- vec2 decay = pow(align, vec2(30.0)) + pow(align, vec2(16.0)) * 0.8 + pow(align, vec2(2.0)) * 0.125;
++ vec2 align2 = align * align;
++ vec2 decay = pow(align, vec2(30.0)) + pow(align, vec2(16.0)) * 0.8 + align2 * 0.125;
+@@
+- vec3 overglow = glow * pow(length(glow) * 1.5, 2.0);
++ float glowRadius = length(glow) * 1.5;
++ vec3 overglow = glow * (glowRadius * glowRadius);
+
+As mesmas alterações foram aplicadas aos equivalentes em shaders/world1/ e shaders/world-1/.
